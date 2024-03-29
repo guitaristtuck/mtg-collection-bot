@@ -1,0 +1,9 @@
+[package]
+name = "fb3k-discord-bot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dotenv = "0.15.0"
+serenity = { version = "0.12", features = ["client", "gateway", "rustls_backend", "model", "collector"] }
+tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread"] }
