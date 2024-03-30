@@ -2,8 +2,9 @@ use serenity::all::ResolvedValue;
 use serenity::builder::{CreateCommand, CreateCommandOption};
 use serenity::model::application::{CommandOptionType, ResolvedOption};
 use crate::mtg::constants::CARD_NAME_MAX_LEN;
+use crate::mtg::tucker_collection::search;
 
-pub fn run(_options: &[ResolvedOption]) -> String {
+pub async fn run<'a>(_options: &[ResolvedOption<'a>]) -> String {
     for option in _options {
         if option.name == "collections" {
             if let ResolvedValue::SubCommandGroup(sub_commands) = &option.value {
@@ -13,7 +14,10 @@ pub fn run(_options: &[ResolvedOption]) -> String {
                             for inner_option in inner_options {
                                 if inner_option.name == "name" {
                                     if let ResolvedValue::String(value) = &inner_option.value {
-                                        return value.to_string();
+                                        match search(value.to_string()).await {
+                                            Ok(result) => return result,
+                                            Err(e) => return e.to_string(),
+                                        }
                                     }
                                 }
                             }
