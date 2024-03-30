@@ -1,34 +1,31 @@
+use serde::Deserialize;
+
+#[derive(Deserialize)]
 pub enum MTGCollectionProvider {
     Archidekt,
 }
 
-pub enum MTGCollectionProviderData {
-    Archidekt(ArkidektProviderData)
-}
-
-pub struct JWT {
-    pub access_token: String,
-    pub refresh_token: String,
-    pub expires_at: i64,
-}
-
-pub struct ArkidektProviderData {
-    pub username: String,
-    pub user_id: i64,
-    pub jwt: JWT,
-}
-
+#[derive(Deserialize)]
 pub struct MTGCollectionConfig {
     pub provider: MTGCollectionProvider,
     pub discord_user: String,
-    pub provider_user: String,
-    pub provider_data: MTGCollectionProviderData,
+    pub provider_collection: String,
 }
 
+#[derive(Deserialize)]
 pub struct MTGConfig {
     pub collections: Vec<MTGCollectionConfig>,
 }
 
 pub struct BotConfig {
     pub mtg: MTGConfig,
+}
+
+pub fn load_config() -> BotConfig {
+    let f = std::fs::File::open("config/mtg.yaml").expect("Could not open file 'config/mtg.yaml'");
+    let mtg_config: MTGConfig = serde_yaml::from_reader(f).expect("Could not load config 'config/mtg.yaml'");
+
+    BotConfig {
+        mtg: mtg_config,
+    }
 }

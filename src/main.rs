@@ -1,5 +1,6 @@
 mod commands;
 mod mtg;
+mod models;
 
 use std::env;
 
@@ -10,8 +11,11 @@ use serenity::model::gateway::Ready;
 use serenity::model::id::GuildId;
 use serenity::prelude::*;
 use dotenv::dotenv;
+use models::config::{BotConfig,load_config};
 
-struct Handler;
+struct Handler {
+    config: BotConfig
+}
 
 #[async_trait]
 impl EventHandler for Handler {
@@ -22,7 +26,7 @@ impl EventHandler for Handler {
 
             let content = match command.data.name.as_str() {
                 "ping" => Some(commands::ping::run(&command.data.options())),
-                "mtg" => Some(commands::mtg::run(&command.data.options()).await),
+                "mtg" => Some(commands::mtg::run(&command.data.options(),&self.config).await),
                 _ => Some("not implemented :(".to_string()),
             };
 
@@ -47,6 +51,7 @@ impl EventHandler for Handler {
                 .expect("GUILD_ID must be an integer"),
         );
 
+        let config: BotConfig = load_config();
         let commands = guild_id
             .set_commands(&ctx.http, vec![
                 commands::ping::register(),
@@ -68,7 +73,11 @@ async fn main() {
 
     // Build our client.
     let mut client = Client::builder(token, GatewayIntents::empty())
-    .event_handler(Handler)
+    .event_handler(
+        Handler {
+            config: load_config()
+        }
+    )
     .await
     .expect("Error creating client");
 
