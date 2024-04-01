@@ -15,10 +15,7 @@ pub async fn run<'a>(_options: &[ResolvedOption<'a>],config: &BotConfig) -> Stri
                             for inner_option in inner_options {
                                 if inner_option.name == "name" {
                                     if let ResolvedValue::String(value) = &inner_option.value {
-                                        match search_collections(value.to_string(),config).await {
-                                            Ok(result) => return result,
-                                            Err(e) => return e.to_string(),
-                                        }
+                                        return search_collections(value.to_string(),&config).await;
                                     }
                                 }
                             }
@@ -29,7 +26,7 @@ pub async fn run<'a>(_options: &[ResolvedOption<'a>],config: &BotConfig) -> Stri
         }
     }
 
-    "Not found".to_string()
+    "Unrecognized command".to_string()
 }
 
 pub fn register() -> CreateCommand {

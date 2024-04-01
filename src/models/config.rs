@@ -1,8 +1,20 @@
 use serde::Deserialize;
+use std::fmt;
 
 #[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum MTGCollectionProvider {
     Archidekt,
+    Moxfield,
+}
+
+impl fmt::Display for MTGCollectionProvider {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MTGCollectionProvider::Archidekt => write!(f, "archidekt"),
+            MTGCollectionProvider::Moxfield => write!(f, "moxfield"),
+        }
+    }
 }
 
 #[derive(Deserialize)]

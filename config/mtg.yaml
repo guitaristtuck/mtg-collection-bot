@@ -2,3 +2,9 @@ collections:
   - provider: archidekt
     discord_user: tuckface
     provider_collection: 243732
+  - provider: moxfield
+    discord_user: wookiee
+    provider_collection: 0LZZ8gT8DkGGeyQtG_uO1w
+  - provider: moxfield
+    discord_user: .sparky
+    provider_collection: PUYRTn5Q2kqiBB531_1W1Q
