@@ -17,4 +17,7 @@ jobs:
         uses: dtolnay/rust-toolchain@1.26.0
       
       - name: test
-        run: cargo test --all-features
+        run: |
+          rustup --version
+          cargo --version
+          cargo test --all-features
