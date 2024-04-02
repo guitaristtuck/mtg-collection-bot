@@ -26,7 +26,7 @@ jobs:
             server: ${{ secrets.SSH_HOST }}
             ssh_private_key: ${{ secrets.SSH_KEY }}
             local_path: "target/release/fb3k-discord-bot"
-            remote_path: "/home/${{ secrets.SSH_USER }}/fb3k-discord-bot"
+            remote_path: "/home/${{ secrets.SSH_USER }}/"
             delete_remote_files: true
       
       - name: Restart systemd service
