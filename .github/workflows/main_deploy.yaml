@@ -19,6 +19,15 @@ jobs:
         run: |
             cargo build --release
 
+      - name: Delete old executable
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+            host: ${{ secrets.SSH_HOST }}
+            username: ${{ secrets.SSH_USER }}
+            key: ${{ secrets.SSH_KEY }}
+            script: |
+                rm /home/fb3k-bot/fb3k-discord-bot
+
       - name: Deploy Release to tinyrick
         uses: wlixcc/SFTP-Deploy-Action@v1.2.4
         with:
@@ -27,7 +36,6 @@ jobs:
             ssh_private_key: ${{ secrets.SSH_KEY }}
             local_path: "target/release/fb3k-discord-bot"
             remote_path: "/home/${{ secrets.SSH_USER }}/"
-            delete_remote_files: true
       
       - name: Restart systemd service
         uses: appleboy/ssh-action@v1.0.3
