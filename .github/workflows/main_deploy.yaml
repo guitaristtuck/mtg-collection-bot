@@ -27,6 +27,7 @@ jobs:
             ssh_private_key: ${{ secrets.SSH_KEY }}
             local_path: "target/release/fb3k-discord-bot"
             remote_path: "/home/${{ secrets.SSH_USER }}/fb3k-discord-bot"
+            delete_remote_files: true
       
       - name: Restart systemd service
         uses: appleboy/ssh-action@v1.0.3
