@@ -24,16 +24,14 @@ impl EventHandler for Handler {
         if let Interaction::Command(command) = interaction {
             println!("Received command interaction: {command:#?}");
 
-            let content = match command.data.name.as_str() {
+            let response = match command.data.name.as_str() {
                 "ping" => Some(commands::ping::run(&command.data.options())),
                 "mtg" => Some(commands::mtg::run(&command.data.options(),&self.config).await),
-                _ => Some("not implemented :(".to_string()),
+                _ => Some(CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().content("Command not implemented :("))),
             };
 
-            if let Some(content) = content {
-                let data = CreateInteractionResponseMessage::new().content(content);
-                let builder = CreateInteractionResponse::Message(data);
-                if let Err(why) = command.create_response(&ctx.http, builder).await {
+            if let Some(response) = response {
+                if let Err(why) = command.create_response(&ctx.http, response).await {
                     println!("Cannot respond to slash command: {why}");
                 }
             }
