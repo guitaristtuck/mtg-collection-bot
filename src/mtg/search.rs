@@ -2,13 +2,29 @@ use crate::models::config::BotConfig;
 use crate::models::config::MTGCollectionProvider;
 use crate::mtg::models::DISCORD_MAX_MESSAGE_LEN;
 use prettytable::{Table, Row, Cell, row};
+
+use super::models::SearchResultCard;
 extern crate prettytable;
+
+pub fn aggregate_search_results(search_results: Vec<SearchResultCard>) -> Vec<SearchResultCard> {
+    let mut temp_map = std::collections::HashMap::new();
+    let owner = if search_results.len() > 0 { search_results.get(0).unwrap().owner.clone() } else { String::from("unknown") };
+
+    for item in search_results {
+        *temp_map.entry(item.name.clone()).or_insert(0) += item.quantity;
+    }
+
+    let aggregated_results: Vec<SearchResultCard> = temp_map.into_iter().map(|(name, quantity)| SearchResultCard { name, quantity, owner: owner.clone() }).collect();
+    
+    return aggregated_results;
+}
 
 pub async fn search_collections(search_term: String,config: &BotConfig) -> String {
     println!("Searching all known collections for search term {}",search_term);
 
     let mut error_list: Vec<String> = Vec::new();
     let mut result_table = Table::new();
+    result_table.set_format(*prettytable::format::consts::FORMAT_BOX_CHARS);
     result_table.add_row(row!["Card","Owner","Quantity"]);
 
     for collection in &config.mtg.collections {
@@ -20,7 +36,9 @@ pub async fn search_collections(search_term: String,config: &BotConfig) -> Strin
 
         match search_response {
             Ok(value) => {
-                for result in value {
+                let aggregated_response = aggregate_search_results(value);
+
+                for result in aggregated_response {
                     result_table.add_row(Row::new(vec![
                         Cell::new(&result.name),
                         Cell::new(&result.owner),
@@ -31,8 +49,6 @@ pub async fn search_collections(search_term: String,config: &BotConfig) -> Strin
                 error_list.push(format!("Could not search collection for user {}: {}",collection.discord_user,e))
             }
         }
-
-        // let mut collection_results = String::from(format!("`{}`'s collection has `{}` matches for the search term `{}`:\n", search_response.results.len(),_name));
     }
 
     let mut result_str = String::new();
@@ -42,7 +58,7 @@ pub async fn search_collections(search_term: String,config: &BotConfig) -> Strin
         result_str.push_str(&format!("Found `{}` matches in `{}` searched collection(s) for card name `{}`:\n",(result_table.len() - 1),config.mtg.collections.len(),search_term));
         result_str.push_str(&format!("```\n{}\n```",result_table.to_string()));
     } else {
-        result_str.push_str(&format!("No matches found in {} searched collection(s)",config.mtg.collections.len()));
+        result_str.push_str(&format!("No matches found in `{}` searched collection(s) for card name `{}`", config.mtg.collections.len(), search_term));
     }
 
     // print out  any errors
@@ -55,8 +71,8 @@ pub async fn search_collections(search_term: String,config: &BotConfig) -> Strin
 
     // Take care of too big of a message
     if result_str.len() > DISCORD_MAX_MESSAGE_LEN {
-        result_str = String::from("Response too big. Try searching for something more unique, idiot.");
+        result_str = String::from(&format!("Response too big for card name `{search_term}`. Try searching for something more unique, idiot."));
     }
 
-    result_str
+    return result_str;
 }
