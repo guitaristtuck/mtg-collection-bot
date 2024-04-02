@@ -1,10 +1,10 @@
 use crate::models::config::BotConfig;
 use crate::models::config::MTGCollectionProvider;
-use crate::mtg::models::DISCORD_MAX_MESSAGE_LEN;
-use prettytable::{Table, Row, Cell, row};
+use crate::mtg::models::DISCORD_EMBED_FIELD_MAX_LEN;
 
 use super::models::SearchResultCard;
-extern crate prettytable;
+
+use serenity::builder::{CreateEmbed,CreateInteractionResponse,CreateInteractionResponseMessage,CreateEmbedFooter};
 
 pub fn aggregate_search_results(search_results: Vec<SearchResultCard>) -> Vec<SearchResultCard> {
     let mut temp_map = std::collections::HashMap::new();
@@ -19,19 +19,22 @@ pub fn aggregate_search_results(search_results: Vec<SearchResultCard>) -> Vec<Se
     return aggregated_results;
 }
 
-pub async fn search_collections(search_term: String,config: &BotConfig) -> String {
+pub async fn search_collections(search_term: String,config: &BotConfig) -> CreateInteractionResponse {
     println!("Searching all known collections for search term {}",search_term);
 
-    let mut error_list: Vec<String> = Vec::new();
-    let mut result_table = Table::new();
-    result_table.set_format(*prettytable::format::consts::FORMAT_BOX_CHARS);
-    result_table.add_row(row!["Card","Owner","Quantity"]);
+    let mut errors: String = String::new();
+    let mut table: Vec<String> = vec![
+        String::new(),
+        String::new(),
+        String::new()
+    ];
+    let mut result_count = 0;
+
 
     for collection in &config.mtg.collections {
         let search_response = match collection.provider {
             MTGCollectionProvider::Archidekt => crate::mtg::providers::archidekt::search(&collection.discord_user, &collection.provider_collection,&search_term).await,
             MTGCollectionProvider::Moxfield => crate::mtg::providers::moxfield::search(&collection.discord_user, &collection.provider_collection,&search_term).await,
-            _ => Err(format!("Unknown provider type {}",collection.provider).into())
         };
 
         match search_response {
@@ -39,40 +42,42 @@ pub async fn search_collections(search_term: String,config: &BotConfig) -> Strin
                 let aggregated_response = aggregate_search_results(value);
 
                 for result in aggregated_response {
-                    result_table.add_row(Row::new(vec![
-                        Cell::new(&result.name),
-                        Cell::new(&result.owner),
-                        Cell::new(&result.quantity.to_string())]));
+                    result_count += 1;
+                    table[0] += &format!("{}\n",result.name);
+                    table[1] += &format!("{}\n",result.owner);
+                    table[2] += &format!("{}\n",result.quantity);
                 }
             }
             Err(e) => {
-                error_list.push(format!("Could not search collection for user {}: {}",collection.discord_user,e))
+                errors.push_str(&format!("Could not search collection for user {}: {}\n",collection.discord_user,e))
             }
         }
     }
 
-    let mut result_str = String::new();
-
-    // print out the results table or a "no matches" message
-    if result_table.len() > 1 {
-        result_str.push_str(&format!("Found `{}` matches in `{}` searched collection(s) for card name `{}`:\n",(result_table.len() - 1),config.mtg.collections.len(),search_term));
-        result_str.push_str(&format!("```\n{}\n```",result_table.to_string()));
-    } else {
-        result_str.push_str(&format!("No matches found in `{}` searched collection(s) for card name `{}`", config.mtg.collections.len(), search_term));
-    }
-
-    // print out  any errors
-    if error_list.len() > 0 {
-        result_str.push_str("\n");
-        for error in error_list {
-            result_str.push_str(&format!("{}\n",error));
+    // return an error if things were too long
+    for str in &table {
+        if str.len() > DISCORD_EMBED_FIELD_MAX_LEN {
+            return CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().content("Search returned too many results to display"))
         }
     }
 
-    // Take care of too big of a message
-    if result_str.len() > DISCORD_MAX_MESSAGE_LEN {
-        result_str = String::from(&format!("Response too big for card name `{search_term}`. Try searching for something more unique, idiot."));
+    let embed: CreateEmbed;
+
+    // print out the results table or a "no matches" message
+    if result_count > 0 {
+        embed = CreateEmbed::new()
+            .title("Search Results")
+            .description(&format!("Found `{}` matches in `{}` searched collection(s) for card name `{}`:\n",result_count,config.mtg.collections.len(),search_term))
+            .field("Card",table[0].clone(), true)
+            .field("Owner", table[1].clone(), true)
+            .field("Quantity", table[2].clone(), true)
+            .footer(CreateEmbedFooter::new(errors));
+    } else {
+        embed = CreateEmbed::new()
+            .title("Search Results")
+            .description(&format!("No matches found in `{}` searched collection(s) for card name `{}`", config.mtg.collections.len(), search_term))
+            .footer(CreateEmbedFooter::new(errors));
     }
 
-    return result_str;
+    CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().add_embed(embed))
 }

@@ -1,11 +1,8 @@
 use reqwest::{StatusCode,Client};
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, AUTHORIZATION, ACCEPT, CONTENT_TYPE};
+use reqwest::header::CONTENT_TYPE;
 use std::error::Error;
-use serde_json::json;
 use serde::Deserialize;
-use crate::mtg::models::{SearchResultCard};
-
-use std::env;
+use crate::mtg::models::SearchResultCard;
 
 // Search API response structs
 #[derive(Deserialize)]
