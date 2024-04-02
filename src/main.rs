@@ -51,7 +51,6 @@ impl EventHandler for Handler {
                 .expect("GUILD_ID must be an integer"),
         );
 
-        let config: BotConfig = load_config();
         let commands = guild_id
             .set_commands(&ctx.http, vec![
                 commands::ping::register(),

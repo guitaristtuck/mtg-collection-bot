@@ -1,0 +1,28 @@
+on:
+  push:
+    branches: main
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: tinyrick
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+    
+      - name: Configure Rust
+        uses: dtolnay/rust-toolchain@1.26.0
+        
+      - name: Build Release
+        run: |
+            cargo build --release
+
+      - name: Deploy Release to tinyrick
+        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+        with:
+            username: ${{ secrets.SSH_USER }}
+            server: ${{ secrets.SSH_HOST }}
+            ssh_private_key: ${{ secrets.SSH_KEY }}
+            local_path: "target/release/fb3k-discord-bot"
+            remote_path: "/home/${{ secrets.SSH_USER }}/"
