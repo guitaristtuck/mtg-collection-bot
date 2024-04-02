@@ -26,4 +26,13 @@ jobs:
             server: ${{ secrets.SSH_HOST }}
             ssh_private_key: ${{ secrets.SSH_KEY }}
             local_path: "target/release/fb3k-discord-bot"
-            remote_path: "/home/${{ secrets.SSH_USER }}/"
+            remote_path: "/home/${{ secrets.SSH_USER }}/fb3k-discord-bot"
+      
+      - name: Restart systemd service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+            host: ${{ secrets.SSH_HOST }}
+            username: ${{ secrets.SSH_USER }}
+            key: ${{ secrets.SSH_KEY }}
+            script: |
+              sudo systemctl restart fb3k-discord-bot
