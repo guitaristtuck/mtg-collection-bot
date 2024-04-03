@@ -1,6 +1,7 @@
 use crate::models::config::BotConfig;
 use crate::models::config::MTGCollectionProvider;
 use crate::mtg::models::DISCORD_EMBED_FIELD_MAX_LEN;
+use log;
 
 use super::models::SearchResultCard;
 
@@ -20,7 +21,7 @@ pub fn aggregate_search_results(search_results: Vec<SearchResultCard>) -> Vec<Se
 }
 
 pub async fn search_collections(search_term: String,config: &BotConfig) -> CreateInteractionResponse {
-    println!("Searching all known collections for search term {}",search_term);
+    log::info!("Searching all known collections for search term {}",search_term);
 
     let mut errors: String = String::new();
     let mut table: Vec<String> = vec![

@@ -29,7 +29,7 @@ jobs:
             username: ${{ secrets.SSH_USER }}
             key: ${{ secrets.SSH_KEY }}
             script: |
-                rm /home/fb3k-bot/fb3k-discord-bot
+                rm /home/fb3k-bot/fb3k_discord_bot
 
       - name: Deploy Release to tinyrick
         uses: wlixcc/SFTP-Deploy-Action@v1.2.4
@@ -37,7 +37,7 @@ jobs:
             username: ${{ secrets.SSH_USER }}
             server: ${{ secrets.SSH_HOST }}
             ssh_private_key: ${{ secrets.SSH_KEY }}
-            local_path: "target/release/fb3k-discord-bot"
+            local_path: "target/release/fb3k_discord_bot"
             remote_path: "/home/${{ secrets.SSH_USER }}/"
       
       - name: Restart systemd service
@@ -47,4 +47,4 @@ jobs:
             username: ${{ secrets.SSH_USER }}
             key: ${{ secrets.SSH_KEY }}
             script: |
-              sudo systemctl restart fb3k-discord-bot
+              sudo systemctl restart fb3k_discord_bot

@@ -1,0 +1,15 @@
+appenders:
+  stdout:
+    kind: console
+    encoder:
+      pattern: "{d} - {m}{n}"
+
+root:
+  level: error
+  appenders: [stdout]
+
+loggers:
+  fb3k_discord_bot:
+    level: info
+    appenders: [stdout]
+    additive: false
