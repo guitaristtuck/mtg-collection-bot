@@ -8,10 +8,13 @@ use serenity::async_trait;
 use serenity::builder::{CreateInteractionResponse, CreateInteractionResponseMessage};
 use serenity::model::application::Interaction;
 use serenity::model::gateway::Ready;
+use serenity::Error as SerenityError;
 use serenity::model::id::GuildId;
 use serenity::prelude::*;
 use dotenv::dotenv;
 use models::config::{BotConfig,load_config};
+
+use log;
 
 struct Handler {
     config: BotConfig
@@ -22,7 +25,7 @@ impl EventHandler for Handler {
     // main handler for processing commands
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::Command(command) = interaction {
-            println!("Received command interaction: {command:#?}");
+            log::info!("Received command interaction: {command:#?}");
 
             let response = match command.data.name.as_str() {
                 "ping" => Some(commands::ping::run(&command.data.options())),
@@ -30,17 +33,28 @@ impl EventHandler for Handler {
                 _ => Some(CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().content("Command not implemented :("))),
             };
 
+
             if let Some(response) = response {
                 if let Err(why) = command.create_response(&ctx.http, response).await {
-                    println!("Cannot respond to slash command: {why}");
+                    match why {
+                        SerenityError::Model(e) => log::error!("Error sending command response: Model Error: {}", e),
+                        SerenityError::Http(e) => log::error!("Error sending command response: Http Error: {}", e),
+                        SerenityError::Json(e) => log::error!("Error sending command response: Json Error: {}", e),
+                        _ => log::error!("Error sending command response: Unknown Error: {}", why),
+                    }
                 }
             }
+            // if let Some(response) = response {
+            //     if let Err(why) = command.create_response(&ctx.http, response).await {
+            //         tracing::error!("{:?}", why);
+            //     }
+            // }
         }
     }
 
     // set up commands on ready
     async fn ready(&self, ctx: Context, ready: Ready) {
-        println!("{} is connected!", ready.user.name);
+        log::info!("{} is connected!", ready.user.name);
 
         let guild_id = GuildId::new(
             env::var("GUILD_ID")
@@ -56,12 +70,16 @@ impl EventHandler for Handler {
             ])
             .await;
 
-        println!("I now have the following guild slash commands: {commands:#?}");
+        log::info!("I now have the following guild slash commands: {commands:#?}");
     }
 }
 
 #[tokio::main]
 async fn main() {
+    // set up logging
+    log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
+    log::info!("logging configured");
+
     // load dotenv
     dotenv().ok();
 
@@ -83,6 +101,6 @@ async fn main() {
     // Shards will automatically attempt to reconnect, and will perform exponential backoff until
     // it reconnects.
     if let Err(why) = client.start().await {
-        println!("Client error: {why:?}");
+        log::info!("Client error: {why:?}");
     }
 }
