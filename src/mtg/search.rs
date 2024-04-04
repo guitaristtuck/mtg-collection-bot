@@ -1,37 +1,109 @@
 use crate::models::config::BotConfig;
 use crate::models::config::MTGCollectionProvider;
-use crate::mtg::models::DISCORD_EMBED_FIELD_MAX_LEN;
 use log;
 
-use super::models::SearchResultCard;
+use super::models::{SearchResultCard,SearchResultEmbed,EMBED_DESCRIPTION_MAX_LEN};
+use serenity::constants::EMBED_MAX_COUNT;
 
-use serenity::builder::{CreateEmbed,CreateInteractionResponse,CreateInteractionResponseMessage,CreateEmbedFooter};
+use serenity::builder::{CreateEmbed,CreateInteractionResponse,CreateInteractionResponseMessage};
 
-pub fn aggregate_search_results(search_results: Vec<SearchResultCard>) -> Vec<SearchResultCard> {
+pub fn generate_embed_data_from_search_results(search_results: Vec<SearchResultCard>) -> Vec<SearchResultEmbed> {
     let mut temp_map = std::collections::HashMap::new();
-    let owner = if search_results.len() > 0 { search_results.get(0).unwrap().owner.clone() } else { String::from("unknown") };
 
+    // use a hashmap to aggregate SearchResultCards together for a given name / set name and card number. This results in a
+    // vec containing all result matches across all users for the given name / set / cn
     for item in search_results {
-        *temp_map.entry(item.name.clone()).or_insert(0) += item.quantity;
+        let embed_title = format!("{} [{}:{}]",&item.name, &item.set.to_uppercase(), &item.cn);
+        temp_map.entry(embed_title).or_insert(Vec::new()).push(item);
     }
 
-    let aggregated_results: Vec<SearchResultCard> = temp_map.into_iter().map(|(name, quantity)| SearchResultCard { name, quantity, owner: owner.clone() }).collect();
-    
-    return aggregated_results;
+    let results: Vec<SearchResultEmbed> = temp_map
+        .into_iter()
+        .map(|(title, cards)| {
+             // Extracting owners and quantities from the SearchResultCard Vec
+             let owners = cards.iter().map(|card| card.owner.clone()).collect();
+             let quantities = cards.iter().map(|card| card.quantity.to_string()).collect();
+ 
+             SearchResultEmbed {
+                 title,
+                 name: cards[0].name.clone(),
+                 set: cards[0].set.clone(),
+                 cn: cards[0].cn.clone(),
+                 owners,
+                 quantities,
+             }
+        })
+        .collect();
+
+    return results;
+}
+
+pub fn generate_scryfall_page_link(title: &String, card_name: &String, set: &String, cn: &String) -> String {
+    return format!("[{title}](https://scryfall.com/card/{set}/{cn}/{})", card_name.to_lowercase().replace(" ","-"));
+}
+
+pub fn generate_scryfall_image_link(set: &String, cn: &String) -> String {
+    return format!("https://api.scryfall.com/cards/{set}/{cn}?format=image");
+}
+
+pub fn create_card_embeds(consolidated_results: &Vec<SearchResultEmbed>) -> Vec<CreateEmbed> {
+    let mut embeds: Vec<CreateEmbed> = Vec::new();
+
+    for result in consolidated_results {
+        embeds.push(
+            CreateEmbed::new()
+                .title(&result.title)
+                .url(format!("https://scryfall.com/card/{}/{}/{}",result.set,result.cn,urlencoding::encode(&result.name.to_lowercase().replace(" ","-"))))
+                .thumbnail(generate_scryfall_image_link(&result.set, &result.cn))
+                .field("Owner",result.owners.join("\n"),true)
+                .field("Quantity", result.quantities.join("\n"),true)
+        )
+    }
+
+    return embeds
+}
+
+pub fn create_card_compact_str(consolidated_results: &Vec<SearchResultEmbed>) -> String {
+    let mut result_str: String = String::new();
+    let mut counter: usize = 0;
+
+    for result in consolidated_results {
+        counter += 1;
+        // create the string with scryfall page link
+        let mut new_entry = String::from(
+            format!(
+                "{}:\n",
+                generate_scryfall_page_link(&result.title, &result.name, &result.set, &result.cn),
+            )
+        );
+
+        
+        for (_i, (owner, quantity)) in result.owners.iter().zip(result.quantities.iter()).enumerate() {
+            new_entry.push_str(&format!("`{quantity}` owned by `{owner}`\n"))
+        }
+
+        //final newline seperator
+        new_entry.push_str("\n");
+
+        if result_str.len() + new_entry.len() + 50 > EMBED_DESCRIPTION_MAX_LEN.into() {
+            result_str.push_str(&format!("...\n\n*{} additional results truncated*",consolidated_results.len()-counter));
+            break;
+        } else {
+            result_str.push_str(&new_entry);
+        }
+    }
+
+    return result_str;
 }
 
 pub async fn search_collections(search_term: String,config: &BotConfig) -> CreateInteractionResponse {
-    log::info!("Searching all known collections for search term {}",search_term);
+    log::info!("Searching all known collections for search term '{}'",search_term);
 
     let mut errors: String = String::new();
-    let mut table: Vec<String> = vec![
-        String::new(),
-        String::new(),
-        String::new()
-    ];
-    let mut result_count = 0;
+    let mut embeds: Vec<CreateEmbed>;
+    let mut raw_results : Vec<SearchResultCard> = Vec::new();
 
-
+    // get all the raw collection results
     for collection in &config.mtg.collections {
         let search_response = match collection.provider {
             MTGCollectionProvider::Archidekt => crate::mtg::providers::archidekt::search(&collection.discord_user, &collection.provider_collection,&search_term).await,
@@ -39,46 +111,45 @@ pub async fn search_collections(search_term: String,config: &BotConfig) -> Creat
         };
 
         match search_response {
-            Ok(value) => {
-                let aggregated_response = aggregate_search_results(value);
-
-                for result in aggregated_response {
-                    result_count += 1;
-                    table[0] += &format!("{}\n",result.name);
-                    table[1] += &format!("{}\n",result.owner);
-                    table[2] += &format!("{}\n",result.quantity);
-                }
+            Ok(mut value) => {
+                raw_results.append(&mut value);
             }
             Err(e) => {
-                errors.push_str(&format!("Could not search collection for user {}: {}\n",collection.discord_user,e))
+                errors.push_str(&format!("Could not search collection for user `{}`: {}\n",collection.discord_user,e))
             }
         }
     }
 
-    // return an error if things were too long
-    for str in &table {
-        if str.len() > DISCORD_EMBED_FIELD_MAX_LEN {
-            return CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().content("Search returned too many results to display"))
-        }
-    }
+    // consolidate raw results
+    let consolidated_results = generate_embed_data_from_search_results(raw_results);
 
-    let embed: CreateEmbed;
-
-    // print out the results table or a "no matches" message
-    if result_count > 0 {
-        embed = CreateEmbed::new()
-            .title("Search Results")
-            .description(&format!("Found `{}` matches in `{}` searched collection(s) for card name `{}`:\n",result_count,config.mtg.collections.len(),search_term))
-            .field("Card",table[0].clone(), true)
-            .field("Owner", table[1].clone(), true)
-            .field("Quantity", table[2].clone(), true)
-            .footer(CreateEmbedFooter::new(errors));
+    if consolidated_results.len() <= EMBED_MAX_COUNT {
+        // Use one embed per unique card
+        embeds = create_card_embeds(&consolidated_results);
     } else {
-        embed = CreateEmbed::new()
-            .title("Search Results")
-            .description(&format!("No matches found in `{}` searched collection(s) for card name `{}`", config.mtg.collections.len(), search_term))
-            .footer(CreateEmbedFooter::new(errors));
+        // use compact output method
+        embeds = Vec::new();
+
+        embeds.push(
+            CreateEmbed::new()
+            .title("Search Results (compact)")
+            .description(
+                create_card_compact_str(&consolidated_results)
+            )
+        );
     }
 
-    CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().add_embed(embed))
+    // print out the embeds or a "no matches" message
+    if consolidated_results.len() > 0 {
+        return CreateInteractionResponse::Message(
+            CreateInteractionResponseMessage::new()
+                .content(&format!("{}Found `{}` matches in `{}` searched collection(s) for card name `{}`:\n",errors,consolidated_results.len(),config.mtg.collections.len(),search_term))
+                .add_embeds(embeds)
+        );
+    } else {
+        return CreateInteractionResponse::Message(
+            CreateInteractionResponseMessage::new()
+                .content(&format!("{}No matches found in `{}` searched collection(s) for card name `{}`", errors,config.mtg.collections.len(), search_term))
+        );
+    }
 }

@@ -8,7 +8,10 @@ use crate::mtg::models::SearchResultCard;
 #[derive(Deserialize)]
 struct ArchidektCard {
     name: String,
+    set: String,
+    cn: String,
 }
+    
 
 #[derive(Deserialize)]
 struct ArchidektSearchResult {
@@ -24,7 +27,7 @@ struct ArchidektSearchResponse {
 pub async fn search(discord_user: &String, collection_id: &String, search_term: &String) -> Result<Vec<SearchResultCard>, Box<dyn Error>> {
     let client = Client::new();
 
-    log::info!("Searching library of collection id {} for term {}",collection_id,search_term);
+    log::info!("Searching archidekt collection of '{}' with collection id '{}' for term '{}'",discord_user,collection_id,search_term);
     let resp = client
         .get(format!("https://www.archidekt.com/api/collection/{}/?cardName={}", collection_id, urlencoding::encode(search_term)))
         .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
@@ -44,6 +47,8 @@ pub async fn search(discord_user: &String, collection_id: &String, search_term: 
     for result in archidekt_response.results {
         result_cards.push(SearchResultCard {
             name: result.card.name,
+            set: result.card.set,
+            cn: result.card.cn,
             quantity: result.quantity,
             owner: discord_user.clone(),
         })
