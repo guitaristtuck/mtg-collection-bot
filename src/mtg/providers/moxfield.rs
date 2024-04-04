@@ -10,6 +10,8 @@ use crate::mtg::models::SearchResultCard;
 #[derive(Deserialize)]
 struct MoxfieldCard {
     name: String,
+    set: String,
+    cn: String,
 }
 
 #[derive(Deserialize)]
@@ -27,7 +29,7 @@ pub async fn search(discord_user: &String, collection_id: &String, search_term: 
     let client = Client::new();
     let modified_search_term = format!("\"{}\"",search_term);
 
-    log::info!("Searching library of collection id {} for term {}",collection_id,search_term);
+    log::info!("Searching moxfield collection of '{}' with collection id '{}' for term '{}'",discord_user,collection_id,search_term);
     let resp = client
         .get(format!("https://api2.moxfield.com/v1/trade-binders/{}/search?q={}", collection_id, &modified_search_term))
         .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
@@ -47,6 +49,8 @@ pub async fn search(discord_user: &String, collection_id: &String, search_term: 
     for result in moxfield_response.data {
         result_cards.push(SearchResultCard {
             name: result.card.name,
+            set: result.card.set,
+            cn: result.card.cn,
             quantity: result.quantity,
             owner: discord_user.clone(),
         })
