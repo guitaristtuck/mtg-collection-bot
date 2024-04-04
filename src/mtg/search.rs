@@ -20,18 +20,25 @@ pub fn generate_embed_data_from_search_results(search_results: Vec<SearchResultC
     let results: Vec<SearchResultEmbed> = temp_map
         .into_iter()
         .map(|(title, cards)| {
-             // Extracting owners and quantities from the SearchResultCard Vec
-             let owners = cards.iter().map(|card| card.owner.clone()).collect();
-             let quantities = cards.iter().map(|card| card.quantity.to_string()).collect();
- 
-             SearchResultEmbed {
-                 title,
-                 name: cards[0].name.clone(),
-                 set: cards[0].set.clone(),
-                 cn: cards[0].cn.clone(),
-                 owners,
-                 quantities,
-             }
+            // roll up any duplicates per owner by squashing together and summing quantities
+            let mut quantities_by_owner: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+            for card in &cards {
+                *quantities_by_owner.entry(card.owner.clone()).or_insert(0) += card.quantity;
+            }
+
+            // Extracting owners and quantities from the SearchResultCard Vec
+            let owners: Vec<String> = quantities_by_owner.keys().cloned().collect();
+            let quantities: Vec<String> = quantities_by_owner.values().map(|q| q.to_string()).collect();
+
+            // push a result embed struct to make it easier to build the resulting message
+            SearchResultEmbed {
+                title,
+                name: cards[0].name.clone(),
+                set: cards[0].set.clone(),
+                cn: cards[0].cn.clone(),
+                owners,
+                quantities,
+            }
         })
         .collect();
 
@@ -115,7 +122,7 @@ pub async fn search_collections(search_term: String,config: &BotConfig) -> Creat
                 raw_results.append(&mut value);
             }
             Err(e) => {
-                errors.push_str(&format!("Could not search collection for user `{}`: {}\n",collection.discord_user,e))
+                errors.push_str(&format!("*Could not search collection for user `{}`: {}*\n",collection.discord_user,e))
             }
         }
     }
@@ -143,7 +150,7 @@ pub async fn search_collections(search_term: String,config: &BotConfig) -> Creat
     if consolidated_results.len() > 0 {
         return CreateInteractionResponse::Message(
             CreateInteractionResponseMessage::new()
-                .content(&format!("{}Found `{}` matches in `{}` searched collection(s) for card name `{}`:\n",errors,consolidated_results.len(),config.mtg.collections.len(),search_term))
+                .content(&format!("Found `{}` matches in `{}` searched collection(s) for card name `{}`:\n{}",consolidated_results.len(),config.mtg.collections.len(),search_term, errors))
                 .add_embeds(embeds)
         );
     } else {
