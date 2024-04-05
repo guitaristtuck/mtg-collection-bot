@@ -4,6 +4,7 @@ use log;
 
 use super::models::{SearchResultCard,SearchResultEmbed,EMBED_DESCRIPTION_MAX_LEN};
 use serenity::constants::EMBED_MAX_COUNT;
+use futures;
 
 use serenity::builder::{CreateEmbed,CreateInteractionResponse,CreateInteractionResponseMessage};
 
@@ -106,26 +107,41 @@ pub fn create_card_compact_str(consolidated_results: &Vec<SearchResultEmbed>) ->
     return result_str;
 }
 
-pub async fn search_collections(search_term: String,config: &BotConfig) -> CreateInteractionResponse {
+pub async fn search_collections(search_term: String, config: &BotConfig) -> CreateInteractionResponse {
     log::info!("Searching all known collections for search term '{}'",search_term);
 
     let mut errors: String = String::new();
     let mut embeds: Vec<CreateEmbed>;
     let mut raw_results : Vec<SearchResultCard> = Vec::new();
 
-    // get all the raw collection results
-    for collection in &config.mtg.collections {
-        let search_response = match collection.provider {
-            MTGCollectionProvider::Archidekt => crate::mtg::providers::archidekt::search(&collection.discord_user, &collection.provider_collection,&search_term).await,
-            MTGCollectionProvider::Moxfield => crate::mtg::providers::moxfield::search(&collection.discord_user, &collection.provider_collection,&search_term).await,
-        };
+    // set up all the raw collection results asynchronously
+    let futures = config.mtg.collections.iter().enumerate().map(|(i, collection)| {
+        let search_term = search_term.clone(); // Clone for each iteration here
+        async move {
+            let result = match collection.provider {
+                MTGCollectionProvider::Archidekt => {
+                    crate::mtg::providers::archidekt::search(collection.discord_user.clone(), collection.provider_collection.clone(), search_term.clone()).await
+                }
+                MTGCollectionProvider::Moxfield => {
+                    crate::mtg::providers::moxfield::search(collection.discord_user.clone(), collection.provider_collection.clone(), search_term.clone()).await
+                }
+            };
+            (i, result)
+        }
+    });
 
-        match search_response {
+    // gather all the results, block until all return
+    let search_responses = futures::future::join_all(futures).await;
+    log::info!("search term '{}' completed across all collections",search_term);
+
+    // unwrap the results into errors and valid responses
+    for search_response in search_responses.into_iter() {
+        match search_response.1 {
             Ok(mut value) => {
                 raw_results.append(&mut value);
             }
             Err(e) => {
-                errors.push_str(&format!("*Could not search collection for user `{}`: {}*\n",collection.discord_user,e))
+                errors.push_str(&format!("*Could not search collection for user `{}`: {}*\n",config.mtg.collections[search_response.0].discord_user,e))
             }
         }
     }
