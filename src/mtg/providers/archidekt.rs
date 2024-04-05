@@ -6,12 +6,25 @@ use crate::mtg::models::SearchResultCard;
 
 // Search API response structs
 #[derive(Deserialize)]
-struct ArchidektCard {
-    name: String,
-    set: String,
-    cn: String,
+struct ArchidektCardVariantBEdition {
+    editioncode: String,
 }
     
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ArchidektCard {
+    ArchidektCardVariantA {
+        name: String,
+        set: String,
+        cn: String,
+    },
+    ArchidektCardVariantB {
+        name: String,
+        edition: ArchidektCardVariantBEdition,
+        #[serde(rename = "collectorNumber")]
+        collector_number: String,
+    },
+}
 
 #[derive(Deserialize)]
 struct ArchidektSearchResult {
@@ -37,6 +50,7 @@ pub async fn search(discord_user: &String, collection_id: &String, search_term: 
     let archidekt_response = match resp.status() {
             StatusCode::OK => {
                 let search_response: ArchidektSearchResponse = resp.json::<ArchidektSearchResponse>().await?;
+                
                 Ok::<ArchidektSearchResponse, Box<dyn Error>>(search_response)
             }
             status => Err(format!("Archidekt collection search failed with status code {}",status).into()),
@@ -45,13 +59,32 @@ pub async fn search(discord_user: &String, collection_id: &String, search_term: 
     let mut result_cards: Vec<SearchResultCard> = Vec::new();
 
     for result in archidekt_response.results {
-        result_cards.push(SearchResultCard {
-            name: result.card.name,
-            set: result.card.set,
-            cn: result.card.cn,
-            quantity: result.quantity,
-            owner: discord_user.clone(),
-        })
+        let card = result.card;
+        match card {
+            
+            ArchidektCard::ArchidektCardVariantA { name, set, cn } => {
+                log::info!("VariantA: {}",name);
+                result_cards.push(SearchResultCard {
+                    name: name,
+                    set: set,
+                    cn: cn,
+                    quantity: result.quantity,
+                    owner: discord_user.clone(),
+                });
+                
+            }
+            ArchidektCard::ArchidektCardVariantB { name, edition, collector_number } => {
+                log::info!("VarriantB: {}",name);
+                result_cards.push(SearchResultCard {
+                    name: name,
+                    set: edition.editioncode,
+                    cn: collector_number,
+                    quantity: result.quantity,
+                    owner: discord_user.clone(),
+                });
+            }
+        }
+        
     }
 
     return Ok(result_cards)
