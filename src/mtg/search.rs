@@ -38,6 +38,7 @@ pub fn generate_embed_data_from_search_results(search_results: Vec<SearchResultC
                 cn: cards[0].cn.clone(),
                 owners,
                 quantities,
+                ck_price: cards[0].ck_price.clone()
             }
         })
         .collect();
@@ -60,6 +61,7 @@ pub fn create_card_embeds(consolidated_results: &Vec<SearchResultEmbed>) -> Vec<
         embeds.push(
             CreateEmbed::new()
                 .title(&result.title)
+                .description(format!("*${} (Card Kingdom)*",result.ck_price))
                 .url(format!("https://scryfall.com/card/{}/{}/{}",result.set,result.cn,urlencoding::encode(&result.name.to_lowercase().replace(" ","-"))))
                 .thumbnail(generate_scryfall_image_link(&result.set, &result.cn))
                 .field("Owner",result.owners.join("\n"),true)
@@ -79,8 +81,9 @@ pub fn create_card_compact_str(consolidated_results: &Vec<SearchResultEmbed>) ->
         // create the string with scryfall page link
         let mut new_entry = String::from(
             format!(
-                "{}:\n",
+                "{}:\n*${} (Card Kingdom)*\n",
                 generate_scryfall_page_link(&result.title, &result.name, &result.set, &result.cn),
+                result.ck_price
             )
         );
 

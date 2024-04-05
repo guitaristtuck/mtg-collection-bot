@@ -6,6 +6,11 @@ use crate::mtg::models::SearchResultCard;
 
 // Search API response structs
 #[derive(Deserialize)]
+struct ArchidektCardPrices {
+    ck: Option<f32>,
+}
+
+#[derive(Deserialize)]
 struct ArchidektCardVariantBEdition {
     editioncode: String,
 }
@@ -17,12 +22,14 @@ enum ArchidektCard {
         name: String,
         set: String,
         cn: String,
+        prices: ArchidektCardPrices,
     },
     ArchidektCardVariantB {
         name: String,
         edition: ArchidektCardVariantBEdition,
         #[serde(rename = "collectorNumber")]
         collector_number: String,
+        prices: ArchidektCardPrices,
     },
 }
 
@@ -62,25 +69,25 @@ pub async fn search(discord_user: &String, collection_id: &String, search_term: 
         let card = result.card;
         match card {
             
-            ArchidektCard::ArchidektCardVariantA { name, set, cn } => {
-                log::info!("VariantA: {}",name);
+            ArchidektCard::ArchidektCardVariantA { name, set, cn, prices } => {
                 result_cards.push(SearchResultCard {
                     name: name,
                     set: set,
                     cn: cn,
                     quantity: result.quantity,
                     owner: discord_user.clone(),
+                    ck_price: format!("{:.2}", prices.ck.unwrap_or(0.00)),
                 });
                 
             }
-            ArchidektCard::ArchidektCardVariantB { name, edition, collector_number } => {
-                log::info!("VarriantB: {}",name);
+            ArchidektCard::ArchidektCardVariantB { name, edition, collector_number, prices } => {
                 result_cards.push(SearchResultCard {
                     name: name,
                     set: edition.editioncode,
                     cn: collector_number,
                     quantity: result.quantity,
                     owner: discord_user.clone(),
+                    ck_price: format!("{:.2}", prices.ck.unwrap_or(0.00)),
                 });
             }
         }

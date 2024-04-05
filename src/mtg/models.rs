@@ -8,6 +8,7 @@ pub struct SearchResultCard {
     pub cn: String,
     pub quantity: i64,
     pub owner: String,
+    pub ck_price: String,
 }
 
 // embed model
@@ -18,4 +19,5 @@ pub struct SearchResultEmbed {
     pub cn: String,
     pub owners: Vec<String>,
     pub quantities: Vec<String>,
+    pub ck_price: String,
 }

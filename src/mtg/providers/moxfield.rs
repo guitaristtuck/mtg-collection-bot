@@ -5,13 +5,17 @@ use serde::Deserialize;
 use crate::mtg::models::SearchResultCard;
 
 // Search API response structs
-// data[].quantity
-// data[].card.name
+#[derive(Deserialize)]
+struct MoxfieldCardPrices {
+    ck: Option<f32>,
+}
+
 #[derive(Deserialize)]
 struct MoxfieldCard {
     name: String,
     set: String,
     cn: String,
+    prices: MoxfieldCardPrices,
 }
 
 #[derive(Deserialize)]
@@ -53,6 +57,7 @@ pub async fn search(discord_user: &String, collection_id: &String, search_term: 
             cn: result.card.cn,
             quantity: result.quantity,
             owner: discord_user.clone(),
+            ck_price: format!("{:.2}", result.card.prices.ck.unwrap_or(0.00)),
         })
     }
 
