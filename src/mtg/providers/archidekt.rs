@@ -44,12 +44,12 @@ struct ArchidektSearchResponse {
     results: Vec<ArchidektSearchResult>
 }
 
-pub async fn search(discord_user: &String, collection_id: &String, search_term: &String) -> Result<Vec<SearchResultCard>, Box<dyn Error>> {
+pub async fn search(discord_user: String, collection_id: String, search_term: String) -> Result<Vec<SearchResultCard>, Box<dyn Error + Send + Sync>> {
     let client = Client::new();
 
     log::info!("Searching archidekt collection of '{}' with collection id '{}' for term '{}'",discord_user,collection_id,search_term);
     let resp = client
-        .get(format!("https://www.archidekt.com/api/collection/{}/?cardName={}", collection_id, urlencoding::encode(search_term)))
+        .get(format!("https://www.archidekt.com/api/collection/{}/?cardName={}", collection_id, urlencoding::encode(&search_term)))
         .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
         .send()
         .await?;
@@ -57,8 +57,7 @@ pub async fn search(discord_user: &String, collection_id: &String, search_term: 
     let archidekt_response = match resp.status() {
             StatusCode::OK => {
                 let search_response: ArchidektSearchResponse = resp.json::<ArchidektSearchResponse>().await?;
-                
-                Ok::<ArchidektSearchResponse, Box<dyn Error>>(search_response)
+                Ok::<ArchidektSearchResponse, Box<dyn Error + Send + Sync>>(search_response)
             }
             status => Err(format!("Archidekt collection search failed with status code {}",status).into()),
         }?;

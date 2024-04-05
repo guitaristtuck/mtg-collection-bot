@@ -29,7 +29,7 @@ struct MoxfieldSearchResponse {
     data: Vec<MoxfieldSearchResult>
 }
 
-pub async fn search(discord_user: &String, collection_id: &String, search_term: &String) -> Result<Vec<SearchResultCard>, Box<dyn Error>> {
+pub async fn search(discord_user: String, collection_id: String, search_term: String) -> Result<Vec<SearchResultCard>, Box<dyn Error + Send + Sync>> {
     let client = Client::new();
     let modified_search_term = format!("\"{}\"",search_term);
 
@@ -43,7 +43,7 @@ pub async fn search(discord_user: &String, collection_id: &String, search_term: 
     let moxfield_response = match resp.status() {
             StatusCode::OK => {
                 let search_response: MoxfieldSearchResponse = resp.json::<MoxfieldSearchResponse>().await?;
-                Ok::<MoxfieldSearchResponse, Box<dyn Error>>(search_response)
+                Ok::<MoxfieldSearchResponse, Box<dyn Error + Send + Sync>>(search_response)
             }
             status => Err(format!("Moxfield collection search failed with status code {}",status).into()),
         }?;
