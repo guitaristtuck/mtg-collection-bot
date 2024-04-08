@@ -11,7 +11,7 @@ pub struct SearchResultCard {
     pub ck_price: String,
 }
 
-// embed model
+// collection search embed model
 pub struct SearchResultEmbed {
     pub title: String,
     pub name: String,
@@ -20,4 +20,13 @@ pub struct SearchResultEmbed {
     pub owners: Vec<String>,
     pub quantities: Vec<String>,
     pub ck_price: String,
+}
+
+// community deck list model
+pub struct CommunityDeckMetadata {
+    pub title: String,
+    pub url: String,
+    pub thumbnail: String,
+    pub original_owner: String,
+    pub last_updated_at: String,
 }

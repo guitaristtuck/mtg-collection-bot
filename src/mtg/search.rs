@@ -8,7 +8,7 @@ use futures;
 
 use serenity::builder::{CreateEmbed,CreateInteractionResponse,CreateInteractionResponseMessage};
 
-pub fn generate_embed_data_from_search_results(search_results: Vec<SearchResultCard>) -> Vec<SearchResultEmbed> {
+fn generate_embed_data_from_search_results(search_results: Vec<SearchResultCard>) -> Vec<SearchResultEmbed> {
     let mut temp_map = std::collections::HashMap::new();
 
     // use a hashmap to aggregate SearchResultCards together for a given name / set name and card number. This results in a
@@ -47,15 +47,15 @@ pub fn generate_embed_data_from_search_results(search_results: Vec<SearchResultC
     return results;
 }
 
-pub fn generate_scryfall_page_link(title: &String, card_name: &String, set: &String, cn: &String) -> String {
+fn generate_scryfall_page_link(title: &String, card_name: &String, set: &String, cn: &String) -> String {
     return format!("[{title}](https://scryfall.com/card/{set}/{cn}/{})", card_name.to_lowercase().replace(" ","-"));
 }
 
-pub fn generate_scryfall_image_link(set: &String, cn: &String) -> String {
+fn generate_scryfall_image_link(set: &String, cn: &String) -> String {
     return format!("https://api.scryfall.com/cards/{set}/{cn}?format=image");
 }
 
-pub fn create_card_embeds(consolidated_results: &Vec<SearchResultEmbed>) -> Vec<CreateEmbed> {
+fn create_card_embeds(consolidated_results: &Vec<SearchResultEmbed>) -> Vec<CreateEmbed> {
     let mut embeds: Vec<CreateEmbed> = Vec::new();
 
     for result in consolidated_results {
@@ -73,7 +73,7 @@ pub fn create_card_embeds(consolidated_results: &Vec<SearchResultEmbed>) -> Vec<
     return embeds
 }
 
-pub fn create_card_compact_str(consolidated_results: &Vec<SearchResultEmbed>) -> String {
+fn create_card_compact_str(consolidated_results: &Vec<SearchResultEmbed>) -> String {
     let mut result_str: String = String::new();
     let mut counter: usize = 0;
 
