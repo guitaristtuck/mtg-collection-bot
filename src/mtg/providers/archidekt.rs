@@ -8,6 +8,8 @@ use crate::mtg::models::SearchResultCard;
 #[derive(Deserialize)]
 struct ArchidektCardPrices {
     ck: Option<f32>,
+    ck_foil: Option<f32>,
+    ck_etched: Option<f32>,
 }
 
 #[derive(Deserialize)]
@@ -75,7 +77,11 @@ pub async fn search(discord_user: String, collection_id: String, search_term: St
                     cn: cn,
                     quantity: result.quantity,
                     owner: discord_user.clone(),
-                    ck_price: format!("{:.2}", prices.ck.unwrap_or(0.00)),
+                    ck_price: format!("{:.2}", prices.ck.unwrap_or(
+                        prices.ck_foil.unwrap_or(
+                            prices.ck_etched.unwrap_or(0.00)
+                        )
+                    )),
                 });
                 
             }
@@ -86,7 +92,11 @@ pub async fn search(discord_user: String, collection_id: String, search_term: St
                     cn: collector_number,
                     quantity: result.quantity,
                     owner: discord_user.clone(),
-                    ck_price: format!("{:.2}", prices.ck.unwrap_or(0.00)),
+                    ck_price: format!("{:.2}", prices.ck.unwrap_or(
+                        prices.ck_foil.unwrap_or(
+                            prices.ck_etched.unwrap_or(0.00)
+                        )
+                    )),
                 });
             }
         }

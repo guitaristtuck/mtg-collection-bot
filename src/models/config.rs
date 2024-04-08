@@ -25,8 +25,16 @@ pub struct MTGCollectionConfig {
 }
 
 #[derive(Deserialize)]
+pub struct MTGCommunityDeck {
+    pub provider: MTGCollectionProvider,
+    pub discord_user: String,
+    pub provider_deck: String,
+}
+
+#[derive(Deserialize)]
 pub struct MTGConfig {
     pub collections: Vec<MTGCollectionConfig>,
+    pub community_decks: Vec<MTGCommunityDeck>,
 }
 
 pub struct BotConfig {

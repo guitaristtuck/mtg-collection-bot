@@ -14,3 +14,13 @@ collections:
   - provider: moxfield
     discord_user: oberawl
     provider_collection: CdNyA-ygkEOt6ecFGHiA5A
+community_decks:
+  - provider: moxfield
+    discord_user: oberawl
+    provider_deck: ev681gZZkEOhPGQ9IqoHWQ
+  - provider: moxfield
+    discord_user: tuckface
+    provider_deck: 6Pi0zam1Ik2BCYVJ67fKCA
+  - provider: moxfield
+    discord_user: .sparky
+    provider_deck: PzWa0HiGREOyeGfQPU80Rg

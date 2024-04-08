@@ -3,6 +3,7 @@ use serenity::builder::{CreateCommand, CreateCommandOption, CreateInteractionRes
 use serenity::model::application::{CommandOptionType, ResolvedOption};
 use crate::mtg::models::CARD_NAME_MAX_LEN;
 use crate::mtg::search::search_collections;
+use crate::mtg::community_decks::list_community_decks;
 use crate::models::config::BotConfig;
 
 pub async fn run<'a>(_options: &[ResolvedOption<'a>],config: &BotConfig) -> CreateInteractionResponse {
@@ -20,6 +21,14 @@ pub async fn run<'a>(_options: &[ResolvedOption<'a>],config: &BotConfig) -> Crea
                                 }
                             }
                         }
+                    }
+                }
+            }
+        } else if option.name == "community_decks" {
+            if let ResolvedValue::SubCommandGroup(sub_commands) = &option.value {
+                for sub_command in sub_commands {
+                    if sub_command.name == "list" {
+                        return list_community_decks(&config).await;
                     }
                 }
             }
@@ -50,6 +59,19 @@ pub fn register() -> CreateCommand {
                     )
                     .max_length(CARD_NAME_MAX_LEN)
                     .required(true)
+                )
+            )
+        )
+        .add_option(
+            CreateCommandOption::new(
+                CommandOptionType::SubCommandGroup,
+                "community_decks",
+                "Commands related to FB3K community decks"
+            ).add_sub_option(
+                CreateCommandOption::new(
+                    CommandOptionType::SubCommand,
+                    "list",
+                    "List all known community decks"
                 )
             )
         )
