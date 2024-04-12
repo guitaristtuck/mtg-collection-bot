@@ -13,7 +13,7 @@ pub async fn list_community_decks(config: &BotConfig) -> CreateInteractionRespon
         async move {
             let result = match deck.provider {
                 MTGCollectionProvider::Archidekt => {
-                    panic!("Provider '{}' not implemented for community decks" , MTGCollectionProvider::Archidekt)
+                    crate::mtg::providers::archidekt::get_deck(deck.discord_user.clone(), deck.provider_deck.clone()).await
                 }
                 MTGCollectionProvider::Moxfield => {
                     crate::mtg::providers::moxfield::get_deck(deck.discord_user.clone(), deck.provider_deck.clone()).await
