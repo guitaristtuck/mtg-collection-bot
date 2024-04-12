@@ -1,12 +1,12 @@
 use serenity::all::ResolvedValue;
-use serenity::builder::{CreateCommand, CreateCommandOption, CreateInteractionResponseMessage, CreateInteractionResponse};
+use serenity::builder::{CreateCommand, CreateCommandOption, EditInteractionResponse};
 use serenity::model::application::{CommandOptionType, ResolvedOption};
 use crate::mtg::models::CARD_NAME_MAX_LEN;
 use crate::mtg::search::search_collections;
 use crate::mtg::community_decks::list_community_decks;
 use crate::models::config::BotConfig;
 
-pub async fn run<'a>(_options: &[ResolvedOption<'a>],config: &BotConfig) -> CreateInteractionResponse {
+pub async fn run<'a>(_options: &[ResolvedOption<'a>],config: &BotConfig) -> EditInteractionResponse {
     for option in _options {
         if option.name == "collections" {
             if let ResolvedValue::SubCommandGroup(sub_commands) = &option.value {
@@ -35,7 +35,7 @@ pub async fn run<'a>(_options: &[ResolvedOption<'a>],config: &BotConfig) -> Crea
         }
     }
 
-    CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().content("Command not implemented :("))
+    EditInteractionResponse::new().content("Command not implemented :(")
 }
 
 pub fn register() -> CreateCommand {

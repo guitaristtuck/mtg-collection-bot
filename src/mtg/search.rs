@@ -6,7 +6,7 @@ use super::models::{SearchResultCard,SearchResultEmbed,EMBED_DESCRIPTION_MAX_LEN
 use serenity::constants::EMBED_MAX_COUNT;
 use futures;
 
-use serenity::builder::{CreateEmbed,CreateInteractionResponse,CreateInteractionResponseMessage};
+use serenity::builder::{CreateEmbed,EditInteractionResponse};
 
 fn generate_embed_data_from_search_results(search_results: Vec<SearchResultCard>) -> Vec<SearchResultEmbed> {
     let mut temp_map = std::collections::HashMap::new();
@@ -107,7 +107,7 @@ fn create_card_compact_str(consolidated_results: &Vec<SearchResultEmbed>) -> Str
     return result_str;
 }
 
-pub async fn search_collections(search_term: String, config: &BotConfig) -> CreateInteractionResponse {
+pub async fn search_collections(search_term: String, config: &BotConfig) -> EditInteractionResponse {
     log::info!("Searching all known collections for search term '{}'",search_term);
 
     let mut errors: String = String::new();
@@ -167,15 +167,13 @@ pub async fn search_collections(search_term: String, config: &BotConfig) -> Crea
 
     // print out the embeds or a "no matches" message
     if consolidated_results.len() > 0 {
-        return CreateInteractionResponse::Message(
-            CreateInteractionResponseMessage::new()
+        return
+            EditInteractionResponse::new()
                 .content(&format!("Found `{}` matches in `{}` searched collection(s) for card name `{}`:\n{}",consolidated_results.len(),config.mtg.collections.len(),search_term, errors))
-                .add_embeds(embeds)
-        );
+                .add_embeds(embeds);
     } else {
-        return CreateInteractionResponse::Message(
-            CreateInteractionResponseMessage::new()
-                .content(&format!("{}No matches found in `{}` searched collection(s) for card name `{}`", errors,config.mtg.collections.len(), search_term))
-        );
+        return 
+            EditInteractionResponse::new()
+                .content(&format!("{}No matches found in `{}` searched collection(s) for card name `{}`", errors,config.mtg.collections.len(), search_term));
     }
 }
