@@ -25,7 +25,6 @@ enum ArchidektCard {
         set: String,
         cn: String,
         prices: ArchidektCardPrices,
-        categories: Option<Vec<String>>,
     },
     ArchidektCardVariantB {
         name: String,
@@ -33,7 +32,6 @@ enum ArchidektCard {
         #[serde(rename = "collectorNumber")]
         collector_number: String,
         prices: ArchidektCardPrices,
-        categories: Option<Vec<String>>,
     },
 }
 
@@ -107,6 +105,28 @@ pub async fn search(discord_user: String, collection_id: String, search_term: St
 
     return Ok(result_cards)
 }
+    
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ArchidektDeckCardDetails {
+    ArchidektDeckCardDetailsA {
+        set: String,
+        cn: String,
+        prices: ArchidektCardPrices,
+    },
+    ArchidektDeckCardDetailsB {
+        edition: ArchidektCardVariantBEdition,
+        #[serde(rename = "collectorNumber")]
+        collector_number: String,
+        prices: ArchidektCardPrices,
+    },
+}
+
+#[derive(Deserialize)]
+struct ArchidektDeckCard {
+    card: ArchidektDeckCardDetails,
+    categories: Vec<String>,
+}
 
 #[derive(Deserialize)]
 struct Owner {
@@ -116,7 +136,7 @@ struct Owner {
 #[derive(Deserialize)]
 struct ArchidektDeck {
     name: String,
-    cards: Vec<ArchidektCard>,
+    cards: Vec<ArchidektDeckCard>,
     owner: Owner,
     #[serde(rename = "updatedAt")]
     updated_at: String,
@@ -133,32 +153,33 @@ pub async fn get_deck(discord_user: String, deck_id: String) -> Result<Community
 
     let archidekt_response = match resp.status() {
             StatusCode::OK => {
-                let deck_response: ArchidektDeck = resp.json::<ArchidektDeck>().await?;
+                let deserialized: serde_json::Result<ArchidektDeck> = serde_json::from_str(&resp.text().await?);
+
+                let deck_response =  match deserialized {
+                    Ok(data) => data,
+                    Err(e) => {
+                        log::error!("Failed to deserialize: {}", e);
+                        // Optionally, you can output the response again here for clarity
+                        return Err(Box::new(e))
+                    }
+                };
+                //let deck_response: ArchidektDeck = resp.json::<ArchidektDeck>().await?;
                 Ok::<ArchidektDeck, Box<dyn Error + Send + Sync>>(deck_response)
             }
             status => Err(format!("archidekt deck lookup failed with status code {}",status).into()),
         }?;
 
     // get any cards with the commander category from the api response
-    let commanders: Vec<ArchidektCard> = archidekt_response.cards.into_iter()
-        .filter(|card| {
-            match card {
-                ArchidektCard::ArchidektCardVariantA { categories, .. } => {
-                    categories.clone().unwrap_or(vec![]).contains(&"Commander".to_string())
-                }
-                ArchidektCard::ArchidektCardVariantB { categories, .. } => {
-                    categories.clone().unwrap_or(vec![]).contains(&"Commander".to_string())
-                }
-            }
-        })
+    let commanders: Vec<ArchidektDeckCard> = archidekt_response.cards.into_iter()
+        .filter(|card| card.categories.clone().contains(&"Commander".to_string()))
         .collect();
 
     // consider only the first commander card for the thumbnail. extract those values
-    let set_cn_tuple: (String, String) = match commanders.get(0).unwrap() {
-        ArchidektCard::ArchidektCardVariantA { set, cn, .. } => {
+    let set_cn_tuple: (String, String) = match &commanders.get(0).unwrap().card {
+        ArchidektDeckCardDetails::ArchidektDeckCardDetailsA { set, cn, .. } => {
             (set.into(), cn.into())
         }
-        ArchidektCard::ArchidektCardVariantB { edition, collector_number, .. } => {
+        ArchidektDeckCardDetails::ArchidektDeckCardDetailsB { edition, collector_number, .. } => {
             (edition.editioncode.clone(), collector_number.into())
         }
     };
