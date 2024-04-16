@@ -1,7 +1,7 @@
 use crate::models::config::{BotConfig, MTGCollectionProvider};
-use serenity::builder::{CreateEmbed,CreateInteractionResponse,CreateInteractionResponseMessage};
+use serenity::builder::{CreateEmbed,EditInteractionResponse};
 
-pub async fn list_community_decks(config: &BotConfig) -> CreateInteractionResponse {
+pub async fn list_community_decks(config: &BotConfig) -> EditInteractionResponse {
     // get all needed metadata for the community decks
     log::info!("Collecting metadata for all configured community decks");
     
@@ -13,7 +13,7 @@ pub async fn list_community_decks(config: &BotConfig) -> CreateInteractionRespon
         async move {
             let result = match deck.provider {
                 MTGCollectionProvider::Archidekt => {
-                    panic!("Provider '{}' not implemented for community decks" , MTGCollectionProvider::Archidekt)
+                    crate::mtg::providers::archidekt::get_deck(deck.discord_user.clone(), deck.provider_deck.clone()).await
                 }
                 MTGCollectionProvider::Moxfield => {
                     crate::mtg::providers::moxfield::get_deck(deck.discord_user.clone(), deck.provider_deck.clone()).await
@@ -47,9 +47,7 @@ pub async fn list_community_decks(config: &BotConfig) -> CreateInteractionRespon
         }
     }
 
-    return CreateInteractionResponse::Message(
-        CreateInteractionResponseMessage::new()
+    return EditInteractionResponse::new()
             .content(&format!("Displaying `{}` of `{}` configured community decks:\n{}",embeds.len(),config.mtg.community_decks.len(), errors))
-            .add_embeds(embeds)
-    );
+            .add_embeds(embeds);
 }

@@ -5,7 +5,7 @@ mod models;
 use std::env;
 
 use serenity::async_trait;
-use serenity::builder::{CreateInteractionResponse, CreateInteractionResponseMessage};
+use serenity::builder::EditInteractionResponse;
 use serenity::model::application::Interaction;
 use serenity::model::gateway::Ready;
 use serenity::Error as SerenityError;
@@ -27,15 +27,17 @@ impl EventHandler for Handler {
         if let Interaction::Command(command) = interaction {
             log::info!("Received command interaction: {command:#?}");
 
+            //defer the response to allow for slow commands
+            command.defer(&ctx.http).await.unwrap();
+
             let response = match command.data.name.as_str() {
                 "ping" => Some(commands::ping::run(&command.data.options())),
                 "mtg" => Some(commands::mtg::run(&command.data.options(),&self.config).await),
-                _ => Some(CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().content("Command not implemented :("))),
+                _ => Some(EditInteractionResponse::new().content("Command not implemented :(")),
             };
 
-
             if let Some(response) = response {
-                if let Err(why) = command.create_response(&ctx.http, response).await {
+                if let Err(why) = command.edit_response(&ctx.http, response).await {
                     match why {
                         SerenityError::Model(e) => log::error!("Error sending command response: Model Error: {}", e),
                         SerenityError::Http(e) => log::error!("Error sending command response: Http Error: {}", e),
@@ -44,11 +46,7 @@ impl EventHandler for Handler {
                     }
                 }
             }
-            // if let Some(response) = response {
-            //     if let Err(why) = command.create_response(&ctx.http, response).await {
-            //         tracing::error!("{:?}", why);
-            //     }
-            // }
+           
         }
     }
 

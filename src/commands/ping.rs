@@ -1,8 +1,8 @@
 use serenity::model::application::ResolvedOption;
-use serenity::builder::{CreateCommand, CreateInteractionResponseMessage, CreateInteractionResponse};
+use serenity::builder::{CreateCommand, EditInteractionResponse};
 
-pub fn run(_options: &[ResolvedOption]) -> CreateInteractionResponse {
-    CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().content("F3BK bot reporting in, ready for fuckery"))
+pub fn run(_options: &[ResolvedOption]) -> EditInteractionResponse {
+    EditInteractionResponse::new().content("F3BK bot reporting in, ready for nonsense")
 }
 
 pub fn register() -> CreateCommand {
