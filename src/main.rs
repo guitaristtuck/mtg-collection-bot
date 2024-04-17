@@ -1,6 +1,7 @@
 mod commands;
 mod mtg;
 mod models;
+mod interactions;
 
 use std::env;
 
@@ -10,6 +11,7 @@ use serenity::model::application::Interaction;
 use serenity::model::gateway::Ready;
 use serenity::Error as SerenityError;
 use serenity::model::id::GuildId;
+use serenity::model::voice::VoiceState; 
 use serenity::prelude::*;
 use dotenv::dotenv;
 use models::config::{BotConfig,load_config};
@@ -50,6 +52,11 @@ impl EventHandler for Handler {
         }
     }
 
+    // interact with channel voice changes
+    async fn voice_state_update(&self, ctx: Context, old: Option<VoiceState>, new: VoiceState) {
+        interactions::nubby::voice_state_update(ctx, &self.config, old, new).await;
+    }
+
     // set up commands on ready
     async fn ready(&self, ctx: Context, ready: Ready) {
         log::info!("{} is connected!", ready.user.name);
@@ -85,7 +92,10 @@ async fn main() {
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 
     // Build our client.
-    let mut client = Client::builder(token, GatewayIntents::empty())
+    let mut client = Client::builder(token, 
+        GatewayIntents::GUILDS
+        | GatewayIntents::GUILD_VOICE_STATES
+    )
     .event_handler(
         Handler {
             config: load_config()
