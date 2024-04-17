@@ -54,7 +54,6 @@ impl EventHandler for Handler {
 
     // interact with channel voice changes
     async fn voice_state_update(&self, ctx: Context, old: Option<VoiceState>, new: VoiceState) {
-        log::info!("voice join detected");
         interactions::nubby::voice_state_update(ctx, &self.config, old, new).await;
     }
 
