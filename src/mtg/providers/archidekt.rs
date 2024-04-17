@@ -112,13 +112,11 @@ enum ArchidektDeckCardDetails {
     ArchidektDeckCardDetailsA {
         set: String,
         cn: String,
-        prices: ArchidektCardPrices,
     },
     ArchidektDeckCardDetailsB {
         edition: ArchidektCardVariantBEdition,
         #[serde(rename = "collectorNumber")]
         collector_number: String,
-        prices: ArchidektCardPrices,
     },
 }
 
