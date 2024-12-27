@@ -32,7 +32,7 @@ struct MoxfieldSearchResponse {
 }
 
 pub async fn search(discord_user: String, collection_id: String, search_term: String) -> Result<Vec<SearchResultCard>, Box<dyn Error + Send + Sync>> {    
-    let client = Client::builder().user_agent("curl/7.81.0").build()?;
+    let client = Client::builder().user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0").build()?;
     let modified_search_term = format!("\"{}\"",search_term);
 
     log::info!("Searching moxfield collection of '{}' with collection id '{}' for term '{}'",discord_user,collection_id,search_term);
