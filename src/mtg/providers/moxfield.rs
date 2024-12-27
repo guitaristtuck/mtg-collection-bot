@@ -32,7 +32,7 @@ struct MoxfieldSearchResponse {
 }
 
 pub async fn search(discord_user: String, collection_id: String, search_term: String) -> Result<Vec<SearchResultCard>, Box<dyn Error + Send + Sync>> {
-    let client = Client::new();
+    let client = Client::builder().http1_only().build()?;
     let modified_search_term = format!("\"{}\"",search_term);
 
     log::info!("Searching moxfield collection of '{}' with collection id '{}' for term '{}'",discord_user,collection_id,search_term);
@@ -40,7 +40,7 @@ pub async fn search(discord_user: String, collection_id: String, search_term: St
         .get(format!("https://api2.moxfield.com/v1/trade-binders/{}/search?q={}", collection_id, &modified_search_term))
         .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
         // Added this header to circumvent cloudflare's bot detection
-        .header("User-Agent", "Mozilla/5.0")
+        .header("User-Agent", "CUSTOM_AGENT")
         .send()
         .await?;
 
