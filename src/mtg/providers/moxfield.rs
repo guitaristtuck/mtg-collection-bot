@@ -40,7 +40,7 @@ pub async fn search(discord_user: String, collection_id: String, search_term: St
         .get(format!("https://api2.moxfield.com/v1/trade-binders/{}/search?q={}", collection_id, &modified_search_term))
         .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
         // Added this header to circumvent cloudflare's bot detection
-        .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0")
+        .header("User-Agent", "Mozilla/5.0")
         .send()
         .await?;
 
