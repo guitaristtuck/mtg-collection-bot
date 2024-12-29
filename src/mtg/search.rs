@@ -123,7 +123,7 @@ pub async fn search_collections(search_term: String, config: &BotConfig) -> Edit
                     crate::mtg::providers::archidekt::search(collection.discord_user.clone(), collection.provider_collection.clone(), search_term.clone()).await
                 }
                 MTGCollectionProvider::Moxfield => {
-                    crate::mtg::providers::moxfield::search(collection.discord_user.clone(), collection.provider_collection.clone(), search_term.clone()).await
+                    crate::mtg::providers::moxfield::search(collection.discord_user.clone(), collection.provider_collection.clone(), search_term.clone(), config.mtg.moxfield_user_agent.clone()).await
                 }
             };
             (i, result)
