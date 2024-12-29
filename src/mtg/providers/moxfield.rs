@@ -31,6 +31,7 @@ struct MoxfieldSearchResponse {
     data: Vec<MoxfieldSearchResult>
 }
 
+
 pub async fn search(discord_user: String, collection_id: String, search_term: String, moxfield_user_agent: String) -> Result<Vec<SearchResultCard>, Box<dyn Error + Send + Sync>> {    
     let client = Client::builder().user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0").build()?;
     let modified_search_term = format!("\"{}\"",search_term);
