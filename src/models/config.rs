@@ -38,6 +38,7 @@ pub struct MTGCommunityDeck {
 pub struct MTGConfig {
     pub collections: Vec<MTGCollectionConfig>,
     pub community_decks: Vec<MTGCommunityDeck>,
+    pub moxfield_user_agent: String,
 }
 
 #[derive(Deserialize)]
