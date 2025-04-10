@@ -2,6 +2,7 @@ use crate::models::config::BotConfig;
 use crate::models::config::MTGCollectionProvider;
 use log;
 
+use std::env;
 use super::models::{SearchResultCard,SearchResultEmbed,EMBED_DESCRIPTION_MAX_LEN};
 use serenity::constants::EMBED_MAX_COUNT;
 use futures;
@@ -123,7 +124,11 @@ pub async fn search_collections(search_term: String, config: &BotConfig) -> Edit
                     crate::mtg::providers::archidekt::search(collection.discord_user.clone(), collection.provider_collection.clone(), search_term.clone()).await
                 }
                 MTGCollectionProvider::Moxfield => {
-                    crate::mtg::providers::moxfield::search(collection.discord_user.clone(), collection.provider_collection.clone(), search_term.clone(), config.mtg.moxfield_user_agent.clone()).await
+                    crate::mtg::providers::moxfield::search(
+                        collection.discord_user.clone(), 
+                        collection.provider_collection.clone(), 
+                        search_term.clone(),
+                        env::var("MOXFIELD_USER_AGENT").expect("Expected MOXFIELD_USER_AGENT in the environment")).await
                 }
             };
             (i, result)
