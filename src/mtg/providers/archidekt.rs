@@ -48,6 +48,7 @@ struct ArchidektSearchResponse {
 pub async fn search(discord_user: String, collection_id: String, search_term: String) -> Result<Vec<SearchResultCard>, Box<dyn Error + Send + Sync>> {
     let client = Client::new();
 
+    log::info!("Searching archidekt collection of '{}' with collection id '{}' for term '{}'",discord_user,collection_id,search_term);
     let resp = client
         .get(format!("https://archidekt.com/api/collection/{}/", collection_id))
         .query(&[("cardName", search_term)])
