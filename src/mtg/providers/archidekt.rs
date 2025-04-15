@@ -1,5 +1,4 @@
-use reqwest::{StatusCode,Client};
-use reqwest::header::CONTENT_TYPE;
+use reqwest::{Client, StatusCode};
 use std::error::Error;
 use serde::Deserialize;
 use crate::mtg::models::{SearchResultCard, CommunityDeckMetadata};
@@ -51,8 +50,8 @@ pub async fn search(discord_user: String, collection_id: String, search_term: St
 
     log::info!("Searching archidekt collection of '{}' with collection id '{}' for term '{}'",discord_user,collection_id,search_term);
     let resp = client
-        .get(format!("https://www.archidekt.com/api/collection/{}/?cardName={}", collection_id, urlencoding::encode(&search_term)))
-        .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .get(format!("https://archidekt.com/api/collection/{}/", collection_id))
+        .query(&[("cardName", search_term)])
         .send()
         .await?;
 
