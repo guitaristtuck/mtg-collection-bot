@@ -11,19 +11,35 @@ collections:
   - provider: moxfield
     discord_user: makimakiroll
     provider_collection: b7fNJ-tWrkKN-abuIN2IgA
+  # sam has multiple binders for organizational purposes
   - provider: moxfield
     discord_user: oberawl
-    provider_collection: CdNyA-ygkEOt6ecFGHiA5A
+    provider_collection: qL5UC6bmNU2QL3CK5vQqyA
+  - provider: moxfield
+    discord_user: oberawl
+    provider_collection: R3TpUZcP9kezw_BJ1XkLkg
+  - provider: moxfield
+    discord_user: oberawl
+    provider_collection: -28mBIESnke0WqwAIf4i5g  
+  - provider: moxfield
+    discord_user: oberawl
+    provider_collection: WNsMsYeM90-lQrw4LYNIng
 community_decks:
   - provider: moxfield
     discord_user: oberawl
     provider_deck: ev681gZZkEOhPGQ9IqoHWQ
+  - provider: moxfield
+    discord_user: oberawl
+    provider_deck: GUIhRIVAt0-LBjlNTMmMdg
   - provider: moxfield
     discord_user: tuckface
     provider_deck: 6Pi0zam1Ik2BCYVJ67fKCA
   - provider: moxfield
     discord_user: .sparky
     provider_deck: PzWa0HiGREOyeGfQPU80Rg
+  - provider: moxfield
+    discord_user: wookiee
+    provider_deck: lGF5Q1WOhkK0hfDCYe73GA
   - provider: archidekt
     discord_user: makimakiroll
     provider_deck: 3531305

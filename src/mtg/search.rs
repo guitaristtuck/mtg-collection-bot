@@ -5,7 +5,7 @@ use log;
 use std::env;
 use super::models::{SearchResultCard,SearchResultEmbed,EMBED_DESCRIPTION_MAX_LEN};
 use serenity::constants::EMBED_MAX_COUNT;
-use futures;
+use tokio::time::{Duration, interval};
 
 use serenity::builder::{CreateEmbed,EditInteractionResponse};
 
@@ -115,41 +115,39 @@ pub async fn search_collections(search_term: String, config: &BotConfig) -> Edit
     let mut embeds: Vec<CreateEmbed>;
     let mut raw_results : Vec<SearchResultCard> = Vec::new();
 
-    // set up all the raw collection results asynchronously
-    let futures = config.mtg.collections.iter().enumerate().map(|(i, collection)| {
+    // set up all the raw collection results synchronously
+    // This needs to be limited to 1 request per second to avoid rate limiting by moxfield
+    let mut tick = interval(Duration::from_secs(1));
+    for (i, collection) in config.mtg.collections.iter().enumerate() {
         let search_term = search_term.clone(); // Clone for each iteration here
-        async move {
-            let result = match collection.provider {
-                MTGCollectionProvider::Archidekt => {
-                    crate::mtg::providers::archidekt::search(collection.discord_user.clone(), collection.provider_collection.clone(), search_term.clone()).await
-                }
-                MTGCollectionProvider::Moxfield => {
-                    crate::mtg::providers::moxfield::search(
-                        collection.discord_user.clone(), 
-                        collection.provider_collection.clone(), 
-                        search_term.clone(),
-                        env::var("MOXFIELD_USER_AGENT").expect("Expected MOXFIELD_USER_AGENT in the environment")).await
-                }
-            };
-            (i, result)
+        let result = match collection.provider {
+            MTGCollectionProvider::Archidekt => {
+                crate::mtg::providers::archidekt::search(
+                    collection.discord_user.clone(), 
+                    collection.provider_collection.clone(), 
+                    search_term.clone()).await
+            }
+            MTGCollectionProvider::Moxfield => {
+                crate::mtg::providers::moxfield::search(
+                    collection.discord_user.clone(), 
+                    collection.provider_collection.clone(), 
+                    search_term.clone(),
+                    env::var("MOXFIELD_USER_AGENT").expect("Expected MOXFIELD_USER_AGENT in the environment")).await
+            }
+        };
+        // wait for the next tick
+        match result {
+            Ok(mut v) => raw_results.append(&mut v),
+            Err(e) => errors.push_str(
+                &format!(
+                    "*Could not search collection for user `{}`: {}*\n",
+                    config.mtg.collections[i].discord_user,e
+                )),
         }
-    });
+        tick.tick().await;
+    };
 
-    // gather all the results, block until all return
-    let search_responses = futures::future::join_all(futures).await;
     log::info!("search term '{}' completed across all collections",search_term);
-
-    // unwrap the results into errors and valid responses
-    for search_response in search_responses.into_iter() {
-        match search_response.1 {
-            Ok(mut value) => {
-                raw_results.append(&mut value);
-            }
-            Err(e) => {
-                errors.push_str(&format!("*Could not search collection for user `{}`: {}*\n",config.mtg.collections[search_response.0].discord_user,e))
-            }
-        }
-    }
 
     // consolidate raw results
     let consolidated_results = generate_embed_data_from_search_results(raw_results);
