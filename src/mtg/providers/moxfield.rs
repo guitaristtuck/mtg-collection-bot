@@ -1,3 +1,4 @@
+use super::rate_limit::RateLimiter;
 use super::{
     deck_metadata, get_json, is_full_page, normalize_base_url, select_ck_price, ProviderError,
     SearchPage, REQUEST_TIMEOUT,
@@ -6,6 +7,7 @@ use crate::mtg::models::{CommunityDeckMetadata, SearchResultCard};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT};
 use reqwest::Client;
 use serde::Deserialize;
+use std::time::Duration;
 
 pub const MOXFIELD_API_BASE_URL: &str = "https://api2.moxfield.com";
 /// Trade binder search returns 25 results per page by default (`pageSize` in the response).
@@ -14,13 +16,19 @@ pub const MOXFIELD_SEARCH_PAGE_SIZE: usize = 25;
 const SEARCH: &str = "Moxfield collection search";
 const DECK: &str = "Moxfield deck lookup";
 
+/// Moxfield allows at most one request per second.
+pub const MOXFIELD_MIN_REQUEST_INTERVAL: Duration = Duration::from_secs(1);
+
 /// Shared Moxfield client. Every request carries the whitelisted User-Agent
 /// (Moxfield's Cloudflare rules block requests without it) and `Accept: application/json`.
 ///
-/// Moxfield allows at most 1 request per second; callers are responsible for pacing.
+/// Moxfield allows at most 1 request per second. Every request made through a client
+/// waits on that client's [`RateLimiter`], so the single client in `ProviderClients`
+/// paces collection search and community decks (and concurrent commands) together.
 pub struct MoxfieldClient {
     http: Client,
     base_url: String,
+    limiter: RateLimiter,
 }
 
 impl MoxfieldClient {
@@ -45,6 +53,7 @@ impl MoxfieldClient {
         Ok(Self {
             http,
             base_url: normalize_base_url(base_url),
+            limiter: RateLimiter::new(MOXFIELD_MIN_REQUEST_INTERVAL),
         })
     }
 
@@ -63,6 +72,7 @@ impl MoxfieldClient {
                 self.base_url
             ))
             .query(&[("q", phrase_query(search_term))]);
+        self.limiter.acquire().await;
         let response: SearchResponse = get_json(request, SEARCH).await?;
         Ok(search_page(response, owner))
     }
@@ -72,6 +82,7 @@ impl MoxfieldClient {
         let request = self
             .http
             .get(format!("{}/v3/decks/all/{deck_id}", self.base_url));
+        self.limiter.acquire().await;
         let deck: Deck = get_json(request, DECK).await?;
         Ok(deck_from_response(deck))
     }
