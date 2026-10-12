@@ -4,7 +4,6 @@ use log;
 
 use super::models::{SearchResultCard, SearchResultEmbed, EMBED_DESCRIPTION_MAX_LEN};
 use serenity::constants::EMBED_MAX_COUNT;
-use std::env;
 use tokio::time::{interval, Duration};
 
 use serenity::builder::{CreateEmbed, EditInteractionResponse};
@@ -158,8 +157,7 @@ pub async fn search_collections(
                     collection.discord_user.clone(),
                     collection.provider_collection.clone(),
                     search_term.clone(),
-                    env::var("MOXFIELD_USER_AGENT")
-                        .expect("Expected MOXFIELD_USER_AGENT in the environment"),
+                    config.env.moxfield_user_agent.clone(),
                 )
                 .await
             }

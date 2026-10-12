@@ -1,5 +1,3 @@
-use std::env;
-
 use crate::commands;
 use crate::interactions;
 use crate::models::config::BotConfig;
@@ -63,12 +61,7 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         log::info!("{} is connected!", ready.user.name);
 
-        let guild_id = GuildId::new(
-            env::var("GUILD_ID")
-                .expect("Expected GUILD_ID in environment")
-                .parse()
-                .expect("GUILD_ID must be an integer"),
-        );
+        let guild_id = GuildId::new(self.config.env.guild_id);
 
         let commands = guild_id
             .set_commands(

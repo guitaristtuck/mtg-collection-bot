@@ -17,14 +17,15 @@ async fn main() {
     // Login with a bot token from the environment
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 
+    // Load config/ and the remaining env vars up front so misconfiguration fails fast
+    let config = load_config();
+
     // Build our client.
     let mut client = Client::builder(
         token,
         GatewayIntents::GUILDS | GatewayIntents::GUILD_VOICE_STATES,
     )
-    .event_handler(Handler {
-        config: load_config(),
-    })
+    .event_handler(Handler { config })
     .await
     .expect("Error creating client");
 
