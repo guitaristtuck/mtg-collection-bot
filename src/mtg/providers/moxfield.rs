@@ -1,157 +1,194 @@
+use super::{
+    deck_metadata, get_json, is_full_page, normalize_base_url, select_ck_price, ProviderError,
+    SearchPage, REQUEST_TIMEOUT,
+};
 use crate::mtg::models::{CommunityDeckMetadata, SearchResultCard};
-use reqwest::header::CONTENT_TYPE;
-use reqwest::{Client, StatusCode};
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT};
+use reqwest::Client;
 use serde::Deserialize;
-use std::error::Error;
 
-// Search API response structs
-#[derive(Deserialize)]
-struct MoxfieldCardPrices {
-    ck: Option<f32>,
-    ck_foil: Option<f32>,
-    ck_etched: Option<f32>,
+pub const MOXFIELD_API_BASE_URL: &str = "https://api2.moxfield.com";
+/// Trade binder search returns 25 results per page by default (`pageSize` in the response).
+pub const MOXFIELD_SEARCH_PAGE_SIZE: usize = 25;
+
+const SEARCH: &str = "Moxfield collection search";
+const DECK: &str = "Moxfield deck lookup";
+
+/// Shared Moxfield client. Every request carries the whitelisted User-Agent
+/// (Moxfield's Cloudflare rules block requests without it) and `Accept: application/json`.
+///
+/// Moxfield allows at most 1 request per second; callers are responsible for pacing.
+pub struct MoxfieldClient {
+    http: Client,
+    base_url: String,
+}
+
+impl MoxfieldClient {
+    /// Client for the real Moxfield API.
+    pub fn new(user_agent: &str) -> Result<Self, ProviderError> {
+        Self::with_base_url(MOXFIELD_API_BASE_URL, user_agent)
+    }
+
+    /// Client for a Moxfield-compatible API at `base_url` (e.g. a mock server).
+    pub fn with_base_url(
+        base_url: impl Into<String>,
+        user_agent: &str,
+    ) -> Result<Self, ProviderError> {
+        let mut headers = HeaderMap::new();
+        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
+        let http = Client::builder()
+            .user_agent(user_agent)
+            .default_headers(headers)
+            .timeout(REQUEST_TIMEOUT)
+            .build()
+            .map_err(ProviderError::Client)?;
+        Ok(Self {
+            http,
+            base_url: normalize_base_url(base_url),
+        })
+    }
+
+    /// Search one trade binder for `search_term` (as a phrase); cards are attributed to `owner`.
+    pub async fn search(
+        &self,
+        binder_id: &str,
+        search_term: &str,
+        owner: &str,
+    ) -> Result<SearchPage, ProviderError> {
+        log::info!("Searching moxfield binder '{binder_id}' for term '{search_term}'");
+        let request = self
+            .http
+            .get(format!(
+                "{}/v1/trade-binders/{binder_id}/search",
+                self.base_url
+            ))
+            .query(&[("q", phrase_query(search_term))]);
+        let response: SearchResponse = get_json(request, SEARCH).await?;
+        Ok(search_page(response, owner))
+    }
+
+    pub async fn get_deck(&self, deck_id: &str) -> Result<CommunityDeckMetadata, ProviderError> {
+        log::info!("Fetching moxfield deck metadata for deck id '{deck_id}'");
+        let request = self
+            .http
+            .get(format!("{}/v3/decks/all/{deck_id}", self.base_url));
+        let deck: Deck = get_json(request, DECK).await?;
+        Ok(deck_from_response(deck))
+    }
+}
+
+/// Wrap the term in quotes so Moxfield matches it as a phrase.
+/// URL encoding is left to the HTTP client.
+pub fn phrase_query(search_term: &str) -> String {
+    format!("\"{search_term}\"")
+}
+
+// ---- search response ----
+
+#[derive(Deserialize, Default)]
+struct Prices {
+    ck: Option<f64>,
+    ck_foil: Option<f64>,
+    ck_etched: Option<f64>,
 }
 
 #[derive(Deserialize)]
-struct MoxfieldCard {
+struct Card {
     name: String,
     set: String,
     cn: String,
-    prices: MoxfieldCardPrices,
+    #[serde(default)]
+    prices: Prices,
 }
 
 #[derive(Deserialize)]
-struct MoxfieldSearchResult {
-    card: MoxfieldCard,
+struct SearchResult {
+    card: Card,
     quantity: i64,
 }
 
 #[derive(Deserialize)]
-struct MoxfieldSearchResponse {
-    data: Vec<MoxfieldSearchResult>,
+#[serde(rename_all = "camelCase")]
+struct SearchResponse {
+    data: Vec<SearchResult>,
+    total_results: Option<u64>,
 }
 
-pub async fn search(
-    discord_user: String,
-    collection_id: String,
-    search_term: String,
-    moxfield_user_agent: String,
-) -> Result<Vec<SearchResultCard>, Box<dyn Error + Send + Sync>> {
-    let client = Client::builder()
-        .user_agent(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0",
-        )
-        .build()?;
-    let modified_search_term = format!("\"{}\"", search_term);
+/// Parse a Moxfield trade binder search response body.
+pub fn parse_search(json: &str, owner: &str) -> Result<SearchPage, serde_json::Error> {
+    serde_json::from_str(json).map(|r| search_page(r, owner))
+}
 
-    log::info!(
-        "Searching moxfield collection of '{}' with collection id '{}' for term '{}'",
-        discord_user,
-        collection_id,
-        search_term
-    );
-    let resp = client
-        .get(format!(
-            "http://api2.moxfield.com/v1/trade-binders/{}/search?q={}",
-            collection_id, &modified_search_term
-        ))
-        .header(CONTENT_TYPE, "*/*")
-        // Added this header as a unique user agent that is whitelisted in cloudflare bot protection
-        .header("User-Agent", moxfield_user_agent)
-        .send()
-        .await?;
+fn search_page(response: SearchResponse, owner: &str) -> SearchPage {
+    let returned = response.data.len();
+    // `hasMore` is unreliable (seen `false` with totalPages 2), so use totalResults.
+    let may_be_incomplete = match response.total_results {
+        Some(total) => total > returned as u64,
+        None => is_full_page(returned, MOXFIELD_SEARCH_PAGE_SIZE),
+    };
 
-    let moxfield_response = match resp.status() {
-        StatusCode::OK => {
-            let search_response: MoxfieldSearchResponse =
-                resp.json::<MoxfieldSearchResponse>().await?;
-            Ok::<MoxfieldSearchResponse, Box<dyn Error + Send + Sync>>(search_response)
-        }
-        status => Err(format!(
-            "Moxfield collection search failed with status code {}",
-            status
-        )
-        .into()),
-    }?;
-
-    let mut result_cards: Vec<SearchResultCard> = Vec::new();
-
-    for result in moxfield_response.data {
-        result_cards.push(SearchResultCard {
-            name: result.card.name,
-            set: result.card.set,
-            cn: result.card.cn,
-            quantity: result.quantity,
-            owner: discord_user.clone(),
-            ck_price: format!(
-                "{:.2}",
-                result.card.prices.ck.unwrap_or(
-                    result
-                        .card
-                        .prices
-                        .ck_foil
-                        .unwrap_or(result.card.prices.ck_etched.unwrap_or(0.00))
-                )
-            ),
+    let cards = response
+        .data
+        .into_iter()
+        .map(|result| {
+            let card = result.card;
+            SearchResultCard {
+                ck_price: select_ck_price(
+                    card.prices.ck,
+                    card.prices.ck_foil,
+                    card.prices.ck_etched,
+                ),
+                name: card.name,
+                set: card.set,
+                cn: card.cn,
+                quantity: result.quantity,
+                owner: owner.to_string(),
+            }
         })
-    }
+        .collect();
 
-    Ok(result_cards)
+    SearchPage {
+        cards,
+        may_be_incomplete,
+    }
+}
+
+// ---- deck response ----
+
+#[derive(Deserialize)]
+struct DeckMainCard {
+    set: String,
+    cn: String,
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CreatedByUser {
-    #[serde(rename = "displayName")]
     display_name: String,
 }
 
 #[derive(Deserialize)]
-struct MoxfieldDeck {
+#[serde(rename_all = "camelCase")]
+struct Deck {
     name: String,
-    main: MoxfieldCard,
-    #[serde(rename = "publicUrl")]
+    /// The deck's featured card (normally the commander); absent on some decks.
+    main: Option<DeckMainCard>,
     public_url: String,
-    #[serde(rename = "createdByUser")]
     created_by_user: CreatedByUser,
-    #[serde(rename = "lastUpdatedAtUtc")]
     last_updated_at_utc: String,
 }
 
-pub async fn get_deck(
-    discord_user: String,
-    deck_id: String,
-) -> Result<CommunityDeckMetadata, Box<dyn Error + Send + Sync>> {
-    let client = Client::new();
+/// Parse a Moxfield deck response body.
+pub fn parse_deck(json: &str) -> Result<CommunityDeckMetadata, serde_json::Error> {
+    serde_json::from_str(json).map(deck_from_response)
+}
 
-    log::info!(
-        "Fetching moxfield deck metadata owned by  '{}' for deck id '{}'",
-        discord_user,
-        deck_id
-    );
-    let resp = client
-        .get(format!(
-            "https://api2.moxfield.com/v3/decks/all/{}",
-            deck_id
-        ))
-        .send()
-        .await?;
-
-    let moxfield_response = match resp.status() {
-        StatusCode::OK => {
-            let deck_response: MoxfieldDeck = resp.json::<MoxfieldDeck>().await?;
-            Ok::<MoxfieldDeck, Box<dyn Error + Send + Sync>>(deck_response)
-        }
-        status => Err(format!("Moxfield deck lookup failed with status code {}", status).into()),
-    }?;
-
-    Ok(CommunityDeckMetadata {
-        title: moxfield_response.name,
-        url: moxfield_response.public_url,
-        thumbnail: format!(
-            "https://api.scryfall.com/cards/{}/{}?format=image",
-            moxfield_response.main.set, moxfield_response.main.cn
-        ),
-        original_owner: moxfield_response.created_by_user.display_name,
-        last_updated_at: moxfield_response.last_updated_at_utc,
-    })
+fn deck_from_response(deck: Deck) -> CommunityDeckMetadata {
+    deck_metadata(
+        deck.name,
+        deck.public_url,
+        deck.main.as_ref().map(|m| (m.set.as_str(), m.cn.as_str())),
+        deck.created_by_user.display_name,
+        deck.last_updated_at_utc,
+    )
 }

@@ -1,155 +1,205 @@
+use super::{
+    deck_metadata, get_json, is_full_page, normalize_base_url, select_ck_price, ProviderError,
+    SearchPage, REQUEST_TIMEOUT,
+};
 use crate::mtg::models::{CommunityDeckMetadata, SearchResultCard};
-use reqwest::{Client, StatusCode};
+use reqwest::Client;
 use serde::Deserialize;
-use std::error::Error;
 
-// Search API response structs
-#[derive(Deserialize)]
-struct ArchidektCardPrices {
-    ck: Option<f32>,
-    ck_foil: Option<f32>,
-    ck_etched: Option<f32>,
+pub const ARCHIDEKT_API_BASE_URL: &str = "https://archidekt.com/api";
+/// Collection search returns 25 results per page; a `pageSize` parameter is ignored.
+pub const ARCHIDEKT_SEARCH_PAGE_SIZE: usize = 25;
+
+const SEARCH: &str = "Archidekt collection search";
+const DECK: &str = "Archidekt deck lookup";
+
+pub struct ArchidektClient {
+    http: Client,
+    base_url: String,
+}
+
+impl ArchidektClient {
+    /// Client for the real Archidekt API.
+    pub fn new() -> Result<Self, ProviderError> {
+        Self::with_base_url(ARCHIDEKT_API_BASE_URL)
+    }
+
+    /// Client for an Archidekt-compatible API at `base_url` (e.g. a mock server).
+    pub fn with_base_url(base_url: impl Into<String>) -> Result<Self, ProviderError> {
+        let http = Client::builder()
+            .timeout(REQUEST_TIMEOUT)
+            .build()
+            .map_err(ProviderError::Client)?;
+        Ok(Self {
+            http,
+            base_url: normalize_base_url(base_url),
+        })
+    }
+
+    /// Search one collection for `search_term`; cards are attributed to `owner`.
+    pub async fn search(
+        &self,
+        collection_id: &str,
+        search_term: &str,
+        owner: &str,
+    ) -> Result<SearchPage, ProviderError> {
+        log::info!("Searching archidekt collection '{collection_id}' for term '{search_term}'");
+        let request = self
+            .http
+            .get(format!("{}/collection/{collection_id}/", self.base_url))
+            .query(&[("cardName", search_term)]);
+        let response: SearchResponse = get_json(request, SEARCH).await?;
+        Ok(search_page(response, owner))
+    }
+
+    pub async fn get_deck(&self, deck_id: &str) -> Result<CommunityDeckMetadata, ProviderError> {
+        log::info!("Fetching archidekt deck metadata for deck id '{deck_id}'");
+        let request = self.http.get(format!("{}/decks/{deck_id}/", self.base_url));
+        let deck: Deck = get_json(request, DECK).await?;
+        Ok(deck_from_response(deck, deck_id))
+    }
+}
+
+// ---- search response ----
+
+#[derive(Deserialize, Default)]
+struct Prices {
+    ck: Option<f64>,
+    // Archidekt spells this `ckfoil`; the alias keeps the older spelling working.
+    #[serde(alias = "ck_foil")]
+    ckfoil: Option<f64>,
+    // Not currently sent by Archidekt.
+    #[serde(alias = "ck_etched")]
+    cketched: Option<f64>,
+}
+
+impl Prices {
+    fn ck_price(&self) -> Option<f64> {
+        select_ck_price(self.ck, self.ckfoil, self.cketched)
+    }
 }
 
 #[derive(Deserialize)]
-struct ArchidektCardVariantBEdition {
+struct Edition {
     editioncode: String,
 }
 
+/// Archidekt has returned cards in two shapes; accept either.
 #[derive(Deserialize)]
 #[serde(untagged)]
-enum ArchidektCard {
-    ArchidektCardVariantA {
+enum Card {
+    /// Current shape: `edition.editioncode` + `collectorNumber`.
+    Edition {
+        name: String,
+        edition: Edition,
+        #[serde(rename = "collectorNumber")]
+        collector_number: String,
+        #[serde(default)]
+        prices: Prices,
+    },
+    /// Flat shape: `set` + `cn`.
+    Flat {
         name: String,
         set: String,
         cn: String,
-        prices: ArchidektCardPrices,
-    },
-    ArchidektCardVariantB {
-        name: String,
-        edition: ArchidektCardVariantBEdition,
-        #[serde(rename = "collectorNumber")]
-        collector_number: String,
-        prices: ArchidektCardPrices,
+        #[serde(default)]
+        prices: Prices,
     },
 }
 
 #[derive(Deserialize)]
-struct ArchidektSearchResult {
-    card: ArchidektCard,
+struct SearchResult {
+    card: Card,
     quantity: i64,
 }
 
 #[derive(Deserialize)]
-struct ArchidektSearchResponse {
-    results: Vec<ArchidektSearchResult>,
+struct SearchResponse {
+    results: Vec<SearchResult>,
+    count: Option<u64>,
+    next: Option<String>,
 }
 
-pub async fn search(
-    discord_user: String,
-    collection_id: String,
-    search_term: String,
-) -> Result<Vec<SearchResultCard>, Box<dyn Error + Send + Sync>> {
-    let client = Client::new();
+/// Parse an Archidekt collection search response body.
+pub fn parse_search(json: &str, owner: &str) -> Result<SearchPage, serde_json::Error> {
+    serde_json::from_str(json).map(|r| search_page(r, owner))
+}
 
-    log::info!(
-        "Searching archidekt collection of '{}' with collection id '{}' for term '{}'",
-        discord_user,
-        collection_id,
-        search_term
-    );
-    let resp = client
-        .get(format!(
-            "https://archidekt.com/api/collection/{}/",
-            collection_id
-        ))
-        .query(&[("cardName", search_term)])
-        .send()
-        .await?;
+fn search_page(response: SearchResponse, owner: &str) -> SearchPage {
+    let returned = response.results.len();
+    let may_be_incomplete = response.next.is_some()
+        || match response.count {
+            Some(count) => count > returned as u64,
+            None => is_full_page(returned, ARCHIDEKT_SEARCH_PAGE_SIZE),
+        };
 
-    let archidekt_response = match resp.status() {
-        StatusCode::OK => {
-            let search_response: ArchidektSearchResponse =
-                resp.json::<ArchidektSearchResponse>().await?;
-            Ok::<ArchidektSearchResponse, Box<dyn Error + Send + Sync>>(search_response)
-        }
-        status => Err(format!(
-            "Archidekt collection search failed with status code {}",
-            status
-        )
-        .into()),
-    }?;
-
-    let mut result_cards: Vec<SearchResultCard> = Vec::new();
-
-    for result in archidekt_response.results {
-        let card = result.card;
-        match card {
-            ArchidektCard::ArchidektCardVariantA {
-                name,
-                set,
-                cn,
-                prices,
-                ..
-            } => {
-                result_cards.push(SearchResultCard {
+    let cards = response
+        .results
+        .into_iter()
+        .map(|result| {
+            let (name, set, cn, prices) = match result.card {
+                Card::Edition {
+                    name,
+                    edition,
+                    collector_number,
+                    prices,
+                } => (name, edition.editioncode, collector_number, prices),
+                Card::Flat {
                     name,
                     set,
                     cn,
-                    quantity: result.quantity,
-                    owner: discord_user.clone(),
-                    ck_price: format!(
-                        "{:.2}",
-                        prices
-                            .ck
-                            .unwrap_or(prices.ck_foil.unwrap_or(prices.ck_etched.unwrap_or(0.00)))
-                    ),
-                });
-            }
-            ArchidektCard::ArchidektCardVariantB {
+                    prices,
+                } => (name, set, cn, prices),
+            };
+            SearchResultCard {
                 name,
-                edition,
-                collector_number,
-                prices,
-                ..
-            } => {
-                result_cards.push(SearchResultCard {
-                    name,
-                    set: edition.editioncode,
-                    cn: collector_number,
-                    quantity: result.quantity,
-                    owner: discord_user.clone(),
-                    ck_price: format!(
-                        "{:.2}",
-                        prices
-                            .ck
-                            .unwrap_or(prices.ck_foil.unwrap_or(prices.ck_etched.unwrap_or(0.00)))
-                    ),
-                });
+                set,
+                cn,
+                quantity: result.quantity,
+                owner: owner.to_string(),
+                ck_price: prices.ck_price(),
             }
-        }
-    }
+        })
+        .collect();
 
-    Ok(result_cards)
+    SearchPage {
+        cards,
+        may_be_incomplete,
+    }
 }
+
+// ---- deck response ----
 
 #[derive(Deserialize)]
 #[serde(untagged)]
-enum ArchidektDeckCardDetails {
-    ArchidektDeckCardDetailsA {
-        set: String,
-        cn: String,
-    },
-    ArchidektDeckCardDetailsB {
-        edition: ArchidektCardVariantBEdition,
+enum DeckCardDetails {
+    Edition {
+        edition: Edition,
         #[serde(rename = "collectorNumber")]
         collector_number: String,
     },
+    Flat {
+        set: String,
+        cn: String,
+    },
+}
+
+impl DeckCardDetails {
+    fn set_cn(&self) -> (&str, &str) {
+        match self {
+            DeckCardDetails::Edition {
+                edition,
+                collector_number,
+            } => (&edition.editioncode, collector_number),
+            DeckCardDetails::Flat { set, cn } => (set, cn),
+        }
+    }
 }
 
 #[derive(Deserialize)]
-struct ArchidektDeckCard {
-    card: ArchidektDeckCardDetails,
+struct DeckCard {
+    card: DeckCardDetails,
+    #[serde(default)]
     categories: Vec<String>,
 }
 
@@ -159,76 +209,33 @@ struct Owner {
 }
 
 #[derive(Deserialize)]
-struct ArchidektDeck {
+struct Deck {
     name: String,
-    cards: Vec<ArchidektDeckCard>,
+    #[serde(default)]
+    cards: Vec<DeckCard>,
     owner: Owner,
     #[serde(rename = "updatedAt")]
     updated_at: String,
 }
 
-pub async fn get_deck(
-    discord_user: String,
-    deck_id: String,
-) -> Result<CommunityDeckMetadata, Box<dyn Error + Send + Sync>> {
-    let client = Client::new();
+/// Parse an Archidekt deck response body.
+pub fn parse_deck(json: &str, deck_id: &str) -> Result<CommunityDeckMetadata, serde_json::Error> {
+    serde_json::from_str(json).map(|d| deck_from_response(d, deck_id))
+}
 
-    log::info!(
-        "Fetching archidekt deck metadata owned by  '{}' for deck id '{}'",
-        discord_user,
-        deck_id
-    );
-    let resp = client
-        .get(format!("https://www.archidekt.com/api/decks/{}/", deck_id))
-        .send()
-        .await?;
-
-    let archidekt_response = match resp.status() {
-        StatusCode::OK => {
-            let deserialized: serde_json::Result<ArchidektDeck> =
-                serde_json::from_str(&resp.text().await?);
-
-            let deck_response = match deserialized {
-                Ok(data) => data,
-                Err(e) => {
-                    log::error!("Failed to deserialize: {}", e);
-                    // Optionally, you can output the response again here for clarity
-                    return Err(Box::new(e));
-                }
-            };
-            //let deck_response: ArchidektDeck = resp.json::<ArchidektDeck>().await?;
-            Ok::<ArchidektDeck, Box<dyn Error + Send + Sync>>(deck_response)
-        }
-        status => Err(format!("archidekt deck lookup failed with status code {}", status).into()),
-    }?;
-
-    // get any cards with the commander category from the api response
-    let commanders: Vec<ArchidektDeckCard> = archidekt_response
+fn deck_from_response(deck: Deck, deck_id: &str) -> CommunityDeckMetadata {
+    // The first Commander card is the thumbnail; decks without one get none.
+    let commander = deck
         .cards
-        .into_iter()
-        .filter(|card| card.categories.clone().contains(&"Commander".to_string()))
-        .collect();
+        .iter()
+        .find(|c| c.categories.iter().any(|cat| cat == "Commander"))
+        .map(|c| c.card.set_cn());
 
-    // consider only the first commander card for the thumbnail. extract those values
-    let set_cn_tuple: (String, String) = match &commanders.first().unwrap().card {
-        ArchidektDeckCardDetails::ArchidektDeckCardDetailsA { set, cn, .. } => {
-            (set.into(), cn.into())
-        }
-        ArchidektDeckCardDetails::ArchidektDeckCardDetailsB {
-            edition,
-            collector_number,
-            ..
-        } => (edition.editioncode.clone(), collector_number.into()),
-    };
-
-    Ok(CommunityDeckMetadata {
-        title: archidekt_response.name,
-        url: format!("https://archidekt.com/decks/{}", deck_id),
-        thumbnail: format!(
-            "https://api.scryfall.com/cards/{}/{}?format=image",
-            set_cn_tuple.0, set_cn_tuple.1
-        ),
-        original_owner: archidekt_response.owner.username,
-        last_updated_at: archidekt_response.updated_at,
-    })
+    deck_metadata(
+        deck.name,
+        format!("https://archidekt.com/decks/{deck_id}"),
+        commander,
+        deck.owner.username,
+        deck.updated_at,
+    )
 }
