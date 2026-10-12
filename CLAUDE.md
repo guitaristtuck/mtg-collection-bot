@@ -34,3 +34,17 @@ Rust version is pinned in `rust-toolchain.toml`; keep the workflow `dtolnay/rust
 
 ## Testing
 There are no tests yet. Put new logic in plain functions that don't need a Discord `Context`, so it can be unit-tested with `#[cfg(test)]` modules.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues on `guitaristtuck/mtg-collection-bot` (via `gh`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
