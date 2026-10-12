@@ -3,10 +3,12 @@
 //!
 //! Each client is built once at startup (see [`ProviderClients`], held in
 //! `BotConfig::providers`) and takes a base URL so tests can point it at a
-//! local mock server. Clients do no rate limiting of their own.
+//! local mock server. The Moxfield client paces its own requests (1 per second,
+//! shared by every caller); Archidekt is not throttled.
 
 pub mod archidekt;
 pub mod moxfield;
+pub mod rate_limit;
 
 use crate::mtg::models::{CommunityDeckMetadata, SearchResultCard};
 use reqwest::RequestBuilder;

@@ -1,11 +1,11 @@
-use crate::models::config::BotConfig;
-use crate::models::config::MTGCollectionProvider;
+use crate::models::config::{BotConfig, MTGCollectionConfig, MTGCollectionProvider};
+use crate::mtg::providers::{ProviderClients, ProviderError, SearchPage};
 use log;
 
 use super::models::{SearchResultCard, SearchResultEmbed, EMBED_DESCRIPTION_MAX_LEN};
+use futures::future::join_all;
 use serenity::constants::EMBED_MAX_COUNT;
 use std::collections::BTreeMap;
-use tokio::time::{interval, Duration};
 
 use serenity::builder::{CreateEmbed, EditInteractionResponse};
 use serenity::utils::MessageBuilder;
@@ -200,62 +200,81 @@ fn search_summary_content(
     message.build()
 }
 
-pub async fn search_collections(
-    search_term: String,
-    config: &BotConfig,
-) -> EditInteractionResponse {
-    log::info!(
-        "Searching all known collections for search term '{}'",
-        search_term
-    );
+/// What searching one configured collection produced.
+pub struct CollectionSearch {
+    /// Discord user the collection belongs to (used in notices and as card owner).
+    pub discord_user: String,
+    pub result: Result<SearchPage, ProviderError>,
+}
 
-    let mut errors: String = String::new();
-    let mut raw_results: Vec<SearchResultCard> = Vec::new();
-
-    // set up all the raw collection results synchronously
-    // This needs to be limited to 1 request per second to avoid rate limiting by moxfield
-    let mut tick = interval(Duration::from_secs(1));
-    for (i, collection) in config.mtg.collections.iter().enumerate() {
+/// Search every collection for `search_term`, returning one entry per collection in
+/// `collections` order.
+///
+/// All collections are searched concurrently: Archidekt requests go out at once, while
+/// Moxfield requests queue on the Moxfield client's shared 1 request/second limiter
+/// (in config order). Nothing waits after the last request.
+pub async fn fetch_collection_searches(
+    search_term: &str,
+    collections: &[MTGCollectionConfig],
+    providers: &ProviderClients,
+) -> Vec<CollectionSearch> {
+    let searches = collections.iter().map(|collection| async move {
         let (id, owner) = (&collection.provider_collection, &collection.discord_user);
         let result = match collection.provider {
             MTGCollectionProvider::Archidekt => {
-                config
-                    .providers
-                    .archidekt
-                    .search(id, &search_term, owner)
-                    .await
+                providers.archidekt.search(id, search_term, owner).await
             }
             MTGCollectionProvider::Moxfield => {
-                config
-                    .providers
-                    .moxfield
-                    .search(id, &search_term, owner)
-                    .await
+                providers.moxfield.search(id, search_term, owner).await
             }
         };
-        // wait for the next tick
-        match result {
+        CollectionSearch {
+            discord_user: owner.clone(),
+            result,
+        }
+    });
+    join_all(searches).await
+}
+
+/// Build the `/mtg collections search` reply from the per-collection outcomes, in order.
+///
+/// The number of collections searched is `searches.len()`. Failed collections and
+/// possibly-incomplete pages become notice lines in the message content; matching cards
+/// are grouped by printing and shown as one embed each (up to Discord's 10-embed limit)
+/// or as a single compact embed beyond that.
+pub fn build_search_reply(
+    search_term: &str,
+    searches: Vec<CollectionSearch>,
+) -> EditInteractionResponse {
+    let collection_count = searches.len();
+    let mut errors: String = String::new();
+    let mut raw_results: Vec<SearchResultCard> = Vec::new();
+
+    for search in searches {
+        match search.result {
             Ok(mut page) => {
                 if page.may_be_incomplete {
-                    errors.push_str(&incomplete_results_line(owner));
+                    errors.push_str(&incomplete_results_line(&search.discord_user));
                 }
                 raw_results.append(&mut page.cards)
             }
-            Err(e) => errors.push_str(&collection_error_line(
-                &config.mtg.collections[i].discord_user,
-                &e.to_string(),
-            )),
+            Err(e) => errors.push_str(&collection_error_line(&search.discord_user, &e.to_string())),
         }
-        tick.tick().await;
     }
-
-    log::info!(
-        "search term '{}' completed across all collections",
-        search_term
-    );
 
     // consolidate raw results
     let consolidated_results = generate_embed_data_from_search_results(raw_results);
+
+    // print out the embeds or a "no matches" message
+    let content = search_summary_content(
+        consolidated_results.len(),
+        collection_count,
+        search_term,
+        &errors,
+    );
+    if consolidated_results.is_empty() {
+        return EditInteractionResponse::new().content(content);
+    }
 
     let embeds = if consolidated_results.len() <= EMBED_MAX_COUNT {
         // Use one embed per unique card
@@ -266,21 +285,27 @@ pub async fn search_collections(
             .title("Search Results (compact)")
             .description(create_card_compact_str(&consolidated_results))]
     };
+    EditInteractionResponse::new()
+        .content(content)
+        .add_embeds(embeds)
+}
 
-    // print out the embeds or a "no matches" message
-    let content = search_summary_content(
-        consolidated_results.len(),
-        config.mtg.collections.len(),
-        &search_term,
-        &errors,
+/// `/mtg collections search`: fetch from every configured collection, then build the reply.
+pub async fn search_collections(
+    search_term: String,
+    config: &BotConfig,
+) -> EditInteractionResponse {
+    log::info!(
+        "Searching all known collections for search term '{}'",
+        search_term
     );
-    if !consolidated_results.is_empty() {
-        EditInteractionResponse::new()
-            .content(content)
-            .add_embeds(embeds)
-    } else {
-        EditInteractionResponse::new().content(content)
-    }
+    let searches =
+        fetch_collection_searches(&search_term, &config.mtg.collections, &config.providers).await;
+    log::info!(
+        "search term '{}' completed across all collections",
+        search_term
+    );
+    build_search_reply(&search_term, searches)
 }
 
 #[cfg(test)]
@@ -733,5 +758,192 @@ mod price_line_tests {
         );
         // user names are escaped like in error lines
         assert!(incomplete_results_line("a`b").contains("`a'b`"));
+    }
+}
+
+#[cfg(test)]
+mod reply_tests {
+    use super::*;
+    use serde_json::Value;
+    use std::ops::Range;
+
+    fn card(name: &str, cn: &str, owner: &str) -> SearchResultCard {
+        SearchResultCard {
+            name: name.to_string(),
+            set: "c21".to_string(),
+            cn: cn.to_string(),
+            quantity: 1,
+            owner: owner.to_string(),
+            ck_price: Some(1.0),
+        }
+    }
+
+    /// Distinct printings `Card NN [C21:N]` for each N in `range`, owned by `owner`.
+    fn distinct_cards(range: Range<usize>, owner: &str) -> Vec<SearchResultCard> {
+        range
+            .map(|i| card(&format!("Card {i:02}"), &i.to_string(), owner))
+            .collect()
+    }
+
+    fn page(
+        owner: &str,
+        cards: Vec<SearchResultCard>,
+        may_be_incomplete: bool,
+    ) -> CollectionSearch {
+        CollectionSearch {
+            discord_user: owner.to_string(),
+            result: Ok(SearchPage {
+                cards,
+                may_be_incomplete,
+            }),
+        }
+    }
+
+    fn found(owner: &str, cards: Vec<SearchResultCard>) -> CollectionSearch {
+        page(owner, cards, false)
+    }
+
+    fn failed(owner: &str) -> CollectionSearch {
+        CollectionSearch {
+            discord_user: owner.to_string(),
+            result: Err(ProviderError::Status {
+                what: "Moxfield collection search",
+                status: reqwest::StatusCode::TOO_MANY_REQUESTS,
+            }),
+        }
+    }
+
+    fn reply_json(searches: Vec<CollectionSearch>) -> Value {
+        serde_json::to_value(build_search_reply("sol", searches)).unwrap()
+    }
+
+    fn content(reply: &Value) -> &str {
+        reply["content"].as_str().unwrap()
+    }
+
+    fn embeds(reply: &Value) -> &Vec<Value> {
+        reply["embeds"].as_array().expect("expected embeds")
+    }
+
+    const FAILED_BOB: &str = "*Could not search collection for user `bob`: \
+        Moxfield collection search failed with status code 429 Too Many Requests*\n";
+
+    #[test]
+    fn no_matches_has_message_and_no_embeds() {
+        let reply = reply_json(vec![found("alice", vec![]), found("bob", vec![])]);
+        assert_eq!(
+            content(&reply),
+            "No matches found in `2` searched collection(s) for card name `sol`"
+        );
+        assert!(reply.get("embeds").is_none(), "{reply}");
+    }
+
+    #[test]
+    fn no_collections_is_a_no_match_reply() {
+        let reply = reply_json(vec![]);
+        assert_eq!(
+            content(&reply),
+            "No matches found in `0` searched collection(s) for card name `sol`"
+        );
+        assert!(reply.get("embeds").is_none(), "{reply}");
+    }
+
+    #[test]
+    fn single_match_is_one_card_embed() {
+        let reply = reply_json(vec![found("alice", vec![card("Sol Ring", "263", "alice")])]);
+        assert_eq!(
+            content(&reply),
+            "Found `1` matches in `1` searched collection(s) for card name `sol`:\n"
+        );
+        let embeds = embeds(&reply);
+        assert_eq!(embeds.len(), 1);
+        assert_eq!(embeds[0]["title"], "Sol Ring [C21:263]");
+    }
+
+    #[test]
+    fn ten_results_are_individual_embeds() {
+        let reply = reply_json(vec![
+            found("alice", distinct_cards(0..6, "alice")),
+            found("bob", distinct_cards(6..10, "bob")),
+        ]);
+        assert!(
+            content(&reply).starts_with("Found `10` matches in `2` searched"),
+            "{reply}"
+        );
+        let embeds = embeds(&reply);
+        assert_eq!(embeds.len(), 10);
+        assert!(embeds.iter().all(|e| e["fields"].is_array()), "{reply}");
+        assert_eq!(embeds[0]["title"], "Card 00 [C21:0]");
+        assert_eq!(embeds[9]["title"], "Card 09 [C21:9]");
+    }
+
+    #[test]
+    fn eleven_results_become_one_compact_embed() {
+        let reply = reply_json(vec![found("alice", distinct_cards(0..11, "alice"))]);
+        assert!(
+            content(&reply).starts_with("Found `11` matches in `1` searched"),
+            "{reply}"
+        );
+        let embeds = embeds(&reply);
+        assert_eq!(embeds.len(), 1);
+        assert_eq!(embeds[0]["title"], "Search Results (compact)");
+        let description = embeds[0]["description"].as_str().unwrap();
+        assert_eq!(description.matches("owned by `alice`").count(), 11);
+    }
+
+    #[test]
+    fn same_printing_from_several_collections_is_one_result() {
+        let reply = reply_json(vec![
+            found("alice", vec![card("Sol Ring", "263", "alice")]),
+            found("bob", vec![card("Sol Ring", "263", "bob")]),
+        ]);
+        assert!(
+            content(&reply).starts_with("Found `1` matches in `2` searched"),
+            "{reply}"
+        );
+        assert_eq!(embeds(&reply).len(), 1);
+    }
+
+    #[test]
+    fn failed_collection_adds_error_line_and_still_counts_as_searched() {
+        let reply = reply_json(vec![
+            found("alice", vec![card("Sol Ring", "263", "alice")]),
+            failed("bob"),
+        ]);
+        assert_eq!(
+            content(&reply),
+            format!(
+                "Found `1` matches in `2` searched collection(s) for card name `sol`:\n{FAILED_BOB}"
+            )
+        );
+    }
+
+    #[test]
+    fn error_lines_precede_the_no_matches_message() {
+        let reply = reply_json(vec![found("alice", vec![]), failed("bob")]);
+        assert_eq!(
+            content(&reply),
+            format!(
+                "{FAILED_BOB}No matches found in `2` searched collection(s) for card name `sol`"
+            )
+        );
+        assert!(reply.get("embeds").is_none(), "{reply}");
+    }
+
+    #[test]
+    fn notices_keep_collection_order() {
+        let reply = reply_json(vec![
+            failed("bob"),
+            page("carol", vec![card("Sol Ring", "263", "carol")], true),
+            failed("bob"),
+        ]);
+        let carol_incomplete = incomplete_results_line("carol");
+        assert_eq!(
+            content(&reply),
+            format!(
+                "Found `1` matches in `3` searched collection(s) for card name `sol`:\n\
+                 {FAILED_BOB}{carol_incomplete}{FAILED_BOB}"
+            )
+        );
     }
 }
