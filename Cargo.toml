@@ -13,7 +13,8 @@ reqwest = { version = "0.12.2", features = ["json"] }
 serde = "1.0.197"
 serde_json = "1.0.115"
 serde_yaml = "0.9"
-serenity = { version = "0.12", features = ["client", "gateway", "rustls_backend", "model", "collector"] }
+# `cache` (also in the defaults) is required: it supplies `old` to `voice_state_update`.
+serenity = { version = "0.12", features = ["client", "gateway", "rustls_backend", "model", "collector", "cache"] }
 tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread"] }
 
 [dev-dependencies]
