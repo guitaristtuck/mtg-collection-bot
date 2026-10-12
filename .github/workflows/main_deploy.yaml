@@ -18,6 +18,10 @@ jobs:
       - name: Configure Rust Cache
         uses: Swatinem/rust-cache@v2
         
+      # Deploy is blocked if any test fails.
+      - name: Test
+        run: cargo test --all-features
+
       - name: Build Release
         run: |
             cargo build --release

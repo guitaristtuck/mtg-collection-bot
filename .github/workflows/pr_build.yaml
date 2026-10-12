@@ -17,7 +17,7 @@ jobs:
       - name: Configure Rust
         uses: dtolnay/rust-toolchain@1.93.0
         with:
-          components: clippy, rustfmt
+          components: clippy, rustfmt, llvm-tools-preview
 
       - name: Configure Rust Cache
         uses: Swatinem/rust-cache@v2
@@ -30,3 +30,12 @@ jobs:
 
       - name: Test
         run: cargo test --all-features
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+        continue-on-error: true
+
+      # Report-only: prints a coverage summary and never fails the PR.
+      - name: Coverage
+        run: cargo llvm-cov --all-features --summary-only
+        continue-on-error: true
