@@ -17,7 +17,9 @@ cargo test --all-features
 Rust version is pinned in `rust-toolchain.toml`; keep the workflow `dtolnay/rust-toolchain@<ver>` tags in sync with it.
 
 ## Layout
-- `src/main.rs` — `Handler` (serenity `EventHandler`): registers guild slash commands in `ready`, dispatches by name in `interaction_create`, forwards voice events. Gateway intents: `GUILDS`, `GUILD_VOICE_STATES`.
+The crate is a library (`src/lib.rs`, declares all modules) plus a thin binary.
+- `src/main.rs` — startup only: log4rs, dotenv, token, config, client build. Gateway intents: `GUILDS`, `GUILD_VOICE_STATES`.
+- `src/handler.rs` — `Handler` (serenity `EventHandler`): registers guild slash commands in `ready`, dispatches by name in `interaction_create`, forwards voice events.
 - `src/commands/` — one file per slash command, each exposing `register() -> CreateCommand` and `run(...) -> EditInteractionResponse`. `ping.rs` is the minimal example; `mtg.rs` shows subcommands and async.
 - `src/interactions/` — non-command event handlers (`nubby.rs`: voice-join announcement).
 - `src/mtg/` — collection search, community decks, provider HTTP clients (`providers/archidekt.rs`, `providers/moxfield.rs`; Moxfield is rate-limited to 1 req/s).
@@ -25,7 +27,7 @@ Rust version is pinned in `rust-toolchain.toml`; keep the workflow `dtolnay/rust
 
 ### Adding a slash command
 1. Create `src/commands/<name>.rs` with `register()` and `run()`; add `pub mod <name>;` to `src/commands/mod.rs`.
-2. Add `commands::<name>::register()` to the `set_commands` vec in `ready` and a match arm in `interaction_create` (`src/main.rs`).
+2. Add `commands::<name>::register()` to the `set_commands` vec in `ready` and a match arm in `interaction_create` (`src/handler.rs`).
 
 ## Runtime
 - Env (via `.env`, gitignored): `DISCORD_TOKEN`, `GUILD_ID`, `MOXFIELD_USER_AGENT`.
@@ -33,7 +35,12 @@ Rust version is pinned in `rust-toolchain.toml`; keep the workflow `dtolnay/rust
 - No persistence and no background scheduler exist yet; anything stateful is in-memory and lost on restart.
 
 ## Testing
-There are no tests yet. Put new logic in plain functions that don't need a Discord `Context`, so it can be unit-tested with `#[cfg(test)]` modules.
+- Tests are offline and deterministic. Never hit the real Archidekt or Moxfield APIs (or Discord); use `wiremock` for HTTP.
+- Put logic in plain functions that don't need a Discord `Context`, so it can be tested directly.
+- Assert serenity builders (`EditInteractionResponse`, `CreateEmbed`, ...) by serializing them with `serde_json::to_value` and checking fields (see `tests/ping.rs`).
+- Use paused tokio time for anything rate-limited or time-based: `#[tokio::test(start_paused = true)]`. Don't sleep for real.
+- Unit tests go in an in-module `#[cfg(test)] mod tests`; integration tests go in `tests/` and use the library crate (`fb3k_discord_bot::...`).
+- PR CI prints a `cargo llvm-cov` coverage summary (report-only). The deploy workflow runs `cargo test` and won't deploy if it fails.
 
 ## Agent skills
 
