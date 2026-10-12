@@ -23,14 +23,14 @@ The crate is a library (`src/lib.rs`, declares all modules) plus a thin binary.
 - `src/commands/` — one file per slash command, each exposing `register() -> CreateCommand` and `run(...) -> EditInteractionResponse`. `ping.rs` is the minimal example; `mtg.rs` shows subcommands and async.
 - `src/interactions/` — non-command event handlers (`nubby.rs`: voice-join announcement).
 - `src/mtg/` — collection search, community decks, provider HTTP clients (`providers/archidekt.rs`, `providers/moxfield.rs`; Moxfield is rate-limited to 1 req/s).
-- `src/models/config.rs` — `BotConfig`, loaded from `config/*.yaml`. Runtime state lives here too (e.g. a `Mutex` in `NubbyConfig`).
+- `src/models/config.rs` — `BotConfig`, loaded and validated at startup from `config/*.yaml` (`load_config_from(dir, env)` returns a `Result`; `load_config()` is the panicking startup wrapper). Runtime state lives here too (e.g. a `Mutex` in `NubbyConfig`).
 
 ### Adding a slash command
 1. Create `src/commands/<name>.rs` with `register()` and `run()`; add `pub mod <name>;` to `src/commands/mod.rs`.
 2. Add `commands::<name>::register()` to the `set_commands` vec in `ready` and a match arm in `interaction_create` (`src/handler.rs`).
 
 ## Runtime
-- Env (via `.env`, gitignored): `DISCORD_TOKEN`, `GUILD_ID`, `MOXFIELD_USER_AGENT`.
+- Env (via `.env`, gitignored): `DISCORD_TOKEN`, `GUILD_ID`, `MOXFIELD_USER_AGENT`. `GUILD_ID` and `MOXFIELD_USER_AGENT` are read once at startup into `BotConfig.env` (`EnvConfig`); use those fields, never `std::env::var` inside a command.
 - Reads `config/` and `log4rs.yaml` relative to the working directory, so run from the repo root.
 - No persistence and no background scheduler exist yet; anything stateful is in-memory and lost on restart.
 
