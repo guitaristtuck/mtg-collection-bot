@@ -6,6 +6,9 @@ use serenity::all::ResolvedValue;
 use serenity::builder::{CreateCommand, CreateCommandOption, EditInteractionResponse};
 use serenity::model::application::{CommandOptionType, ResolvedOption};
 
+/// Shortest search term accepted; shorter terms match too many cards to be useful.
+const SEARCH_NAME_MIN_LEN: u16 = 3;
+
 pub async fn run<'a>(
     _options: &[ResolvedOption<'a>],
     config: &BotConfig,
@@ -62,6 +65,7 @@ pub fn register() -> CreateCommand {
                         "name",
                         "Name (or partial name) of card to search for",
                     )
+                    .min_length(SEARCH_NAME_MIN_LEN)
                     .max_length(CARD_NAME_MAX_LEN)
                     .required(true),
                 ),
@@ -79,4 +83,27 @@ pub fn register() -> CreateCommand {
                 "List all known community decks",
             )),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn search_name_option_requires_three_to_max_chars() {
+        let command = serde_json::to_value(register()).unwrap();
+        assert_eq!(command["name"], "mtg");
+
+        let collections = &command["options"][0];
+        assert_eq!(collections["name"], "collections");
+        let search = &collections["options"][0];
+        assert_eq!(search["name"], "search");
+        let name = &search["options"][0];
+        assert_eq!(name["name"], "name");
+        assert_eq!(name["type"], json!(CommandOptionType::String));
+        assert_eq!(name["required"], true);
+        assert_eq!(name["min_length"], 3);
+        assert_eq!(name["max_length"], CARD_NAME_MAX_LEN);
+    }
 }
