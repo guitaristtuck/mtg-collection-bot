@@ -1,8 +1,8 @@
+use crate::interactions::nubby::NUBBY_ANNOUNCE_RESET_HOURS;
+use chrono::{Duration, Utc};
 use serde::Deserialize;
 use std::fmt;
 use std::sync::Mutex;
-use chrono::{Utc,Duration};
-use crate::interactions::nubby::NUBBY_ANNOUNCE_RESET_HOURS;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -44,14 +44,13 @@ pub struct MTGConfig {
 pub struct NubbyConfig {
     pub nubby_user_id: u64,
     #[serde(skip_deserializing, default = "default_last_announced")]
-    pub nubby_last_announced: Mutex<chrono::DateTime<Utc>>
+    pub nubby_last_announced: Mutex<chrono::DateTime<Utc>>,
 }
 
-
 fn default_last_announced() -> Mutex<chrono::DateTime<Utc>> {
-    let nubby_last_announced: Mutex<chrono::DateTime<Utc>>;
-    nubby_last_announced = Mutex::new(Utc::now() - Duration::hours(NUBBY_ANNOUNCE_RESET_HOURS + 1));
-    return nubby_last_announced;
+    let nubby_last_announced: Mutex<chrono::DateTime<Utc>> =
+        Mutex::new(Utc::now() - Duration::hours(NUBBY_ANNOUNCE_RESET_HOURS + 1));
+    nubby_last_announced
 }
 
 #[derive(Deserialize)]
@@ -67,13 +66,18 @@ pub struct BotConfig {
 
 pub fn load_config() -> BotConfig {
     let f = std::fs::File::open("config/mtg.yaml").expect("Could not open file 'config/mtg.yaml'");
-    let mtg_config: MTGConfig = serde_yaml::from_reader(f).expect("Could not load config 'config/mtg.yaml'");
+    let mtg_config: MTGConfig =
+        serde_yaml::from_reader(f).expect("Could not load config 'config/mtg.yaml'");
 
-    let f = std::fs::File::open("config/common.yaml").expect("Could not open file 'config/common.yaml'");
-    let common_config: CommonConfig = serde_yaml::from_reader(f).expect("Could not load config 'config/common.yaml'");
+    let f = std::fs::File::open("config/common.yaml")
+        .expect("Could not open file 'config/common.yaml'");
+    let common_config: CommonConfig =
+        serde_yaml::from_reader(f).expect("Could not load config 'config/common.yaml'");
 
-    let f = std::fs::File::open("config/nubby.yaml").expect("Could not open file 'config/nubby.yaml'");
-    let nubby_config: NubbyConfig = serde_yaml::from_reader(f).expect("Could not load config 'config/nubby.yaml'");
+    let f =
+        std::fs::File::open("config/nubby.yaml").expect("Could not open file 'config/nubby.yaml'");
+    let nubby_config: NubbyConfig =
+        serde_yaml::from_reader(f).expect("Could not load config 'config/nubby.yaml'");
 
     BotConfig {
         mtg: mtg_config,

@@ -1,25 +1,23 @@
 mod commands;
-mod mtg;
-mod models;
 mod interactions;
+mod models;
+mod mtg;
 
 use std::env;
 
+use dotenv::dotenv;
+use models::config::{load_config, BotConfig};
 use serenity::async_trait;
 use serenity::builder::EditInteractionResponse;
 use serenity::model::application::Interaction;
 use serenity::model::gateway::Ready;
-use serenity::Error as SerenityError;
 use serenity::model::id::GuildId;
-use serenity::model::voice::VoiceState; 
+use serenity::model::voice::VoiceState;
 use serenity::prelude::*;
-use dotenv::dotenv;
-use models::config::{BotConfig,load_config};
-
-use log;
+use serenity::Error as SerenityError;
 
 struct Handler {
-    config: BotConfig
+    config: BotConfig,
 }
 
 #[async_trait]
@@ -34,21 +32,26 @@ impl EventHandler for Handler {
 
             let response = match command.data.name.as_str() {
                 "ping" => Some(commands::ping::run(&command.data.options())),
-                "mtg" => Some(commands::mtg::run(&command.data.options(),&self.config).await),
+                "mtg" => Some(commands::mtg::run(&command.data.options(), &self.config).await),
                 _ => Some(EditInteractionResponse::new().content("Command not implemented :(")),
             };
 
             if let Some(response) = response {
                 if let Err(why) = command.edit_response(&ctx.http, response).await {
                     match why {
-                        SerenityError::Model(e) => log::error!("Error sending command response: Model Error: {}", e),
-                        SerenityError::Http(e) => log::error!("Error sending command response: Http Error: {}", e),
-                        SerenityError::Json(e) => log::error!("Error sending command response: Json Error: {}", e),
+                        SerenityError::Model(e) => {
+                            log::error!("Error sending command response: Model Error: {}", e)
+                        }
+                        SerenityError::Http(e) => {
+                            log::error!("Error sending command response: Http Error: {}", e)
+                        }
+                        SerenityError::Json(e) => {
+                            log::error!("Error sending command response: Json Error: {}", e)
+                        }
                         _ => log::error!("Error sending command response: Unknown Error: {}", why),
                     }
                 }
             }
-           
         }
     }
 
@@ -69,10 +72,10 @@ impl EventHandler for Handler {
         );
 
         let commands = guild_id
-            .set_commands(&ctx.http, vec![
-                commands::ping::register(),
-                commands::mtg::register()
-            ])
+            .set_commands(
+                &ctx.http,
+                vec![commands::ping::register(), commands::mtg::register()],
+            )
             .await;
 
         log::info!("I now have the following guild slash commands: {commands:#?}");
@@ -92,15 +95,13 @@ async fn main() {
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 
     // Build our client.
-    let mut client = Client::builder(token, 
-        GatewayIntents::GUILDS
-        | GatewayIntents::GUILD_VOICE_STATES
+    let mut client = Client::builder(
+        token,
+        GatewayIntents::GUILDS | GatewayIntents::GUILD_VOICE_STATES,
     )
-    .event_handler(
-        Handler {
-            config: load_config()
-        }
-    )
+    .event_handler(Handler {
+        config: load_config(),
+    })
     .await
     .expect("Error creating client");
 
