@@ -1,4 +1,5 @@
 use crate::interactions::nubby::NUBBY_ANNOUNCE_RESET_HOURS;
+use crate::mtg::providers::{ArchidektClient, MoxfieldClient, ProviderClients};
 use chrono::{Duration, Utc};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -107,6 +108,8 @@ pub struct BotConfig {
     pub nubby: NubbyConfig,
     pub common: CommonConfig,
     pub env: EnvConfig,
+    /// Provider HTTP clients, built once from `env`.
+    pub providers: ProviderClients,
 }
 
 #[derive(Debug)]
@@ -199,6 +202,20 @@ fn load_yaml<T: DeserializeOwned>(dir: &Path, file: &str) -> Result<T, ConfigErr
     serde_yaml::from_reader(f).map_err(|source| ConfigError::Parse { path, source })
 }
 
+/// Build the provider HTTP clients; the Moxfield client sends `env.moxfield_user_agent`.
+pub fn build_provider_clients(env: &EnvConfig) -> Result<ProviderClients, ConfigError> {
+    Ok(ProviderClients {
+        archidekt: ArchidektClient::new()
+            .map_err(|e| ConfigError::Invalid(format!("archidekt client: {e}")))?,
+        moxfield: MoxfieldClient::new(&env.moxfield_user_agent).map_err(|e| {
+            ConfigError::InvalidEnv {
+                name: "MOXFIELD_USER_AGENT",
+                reason: e.to_string(),
+            }
+        })?,
+    })
+}
+
 /// Load and validate `mtg.yaml`, `common.yaml` and `nubby.yaml` from `dir`.
 pub fn load_config_from(dir: &Path, env: EnvConfig) -> Result<BotConfig, ConfigError> {
     let mtg: MTGConfig = load_yaml(dir, "mtg.yaml")?;
@@ -207,6 +224,7 @@ pub fn load_config_from(dir: &Path, env: EnvConfig) -> Result<BotConfig, ConfigE
         mtg,
         common: load_yaml(dir, "common.yaml")?,
         nubby: load_yaml(dir, "nubby.yaml")?,
+        providers: build_provider_clients(&env)?,
         env,
     })
 }
@@ -362,6 +380,31 @@ mod tests {
             err,
             ConfigError::InvalidEnv {
                 name: "GUILD_ID",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn provider_clients_build_from_env() {
+        let env = EnvConfig {
+            guild_id: 1,
+            moxfield_user_agent: "test-agent/1.0".to_string(),
+        };
+        assert!(build_provider_clients(&env).is_ok());
+    }
+
+    #[test]
+    fn moxfield_user_agent_that_is_not_a_valid_header_fails() {
+        let env = EnvConfig {
+            guild_id: 1,
+            moxfield_user_agent: "bad\nagent".to_string(),
+        };
+        let err = build_provider_clients(&env).err().expect("should fail");
+        assert!(matches!(
+            err,
+            ConfigError::InvalidEnv {
+                name: "MOXFIELD_USER_AGENT",
                 ..
             }
         ));

@@ -1,0 +1,120 @@
+{
+  "pageNumber": 1,
+  "pageSize": 25,
+  "totalResults": 45,
+  "totalPages": 2,
+  "hasMore": false,
+  "isEmpty": false,
+  "areTotalsPartial": false,
+  "data": [
+    {
+      "id": "NoDAlg",
+      "quantity": 1,
+      "condition": "nearMint",
+      "finish": "nonFoil",
+      "isFoil": false,
+      "isProxy": false,
+      "language": {
+        "id": "LD58x",
+        "code": "en",
+        "name": "English"
+      },
+      "game": "paper",
+      "card": {
+        "id": "kX0pK",
+        "uniqueCardId": "YlnWG",
+        "scryfall_id": "da1a9643-34d6-4b4b-b896-2d4626eca40a",
+        "name": "Sorin, Solemn Visitor",
+        "set": "ktk",
+        "set_name": "Khans of Tarkir",
+        "cn": "202",
+        "layout": "normal",
+        "rarity": "mythic",
+        "card_faces": [],
+        "prices": {
+          "usd": 3.1100,
+          "usd_foil": 8.0600,
+          "ck": 1.2900,
+          "ck_foil": 5.9900,
+          "ck_etched": null,
+          "lastUpdatedAtUtc": "2026-10-12T10:05:21.599Z"
+        }
+      }
+    },
+    {
+      "id": "DXvAxp",
+      "quantity": 1,
+      "condition": "nearMint",
+      "finish": "nonFoil",
+      "isFoil": false,
+      "isProxy": false,
+      "language": {
+        "id": "LD58x",
+        "code": "en",
+        "name": "English"
+      },
+      "game": "paper",
+      "card": {
+        "id": "naoWN",
+        "uniqueCardId": "LKzVP",
+        "scryfall_id": "a3879b81-aa4c-4d35-bed2-78ebb4a50b59",
+        "name": "Solemn Simulacrum",
+        "set": "mkc",
+        "set_name": "Murders at Karlov Manor Commander",
+        "cn": "238",
+        "layout": "normal",
+        "rarity": "rare",
+        "card_faces": [],
+        "prices": {
+          "usd": 0.3500,
+          "usd_foil": null,
+          "ck": 0.4900,
+          "ck_foil": null,
+          "ck_etched": null,
+          "lastUpdatedAtUtc": "2026-10-12T10:05:21.599Z"
+        }
+      }
+    },
+    {
+      "id": "Gw9P2o",
+      "quantity": 1,
+      "condition": "nearMint",
+      "finish": "nonFoil",
+      "isFoil": false,
+      "isProxy": false,
+      "language": {
+        "id": "LD58x",
+        "code": "en",
+        "name": "English"
+      },
+      "game": "paper",
+      "card": {
+        "id": "EZ36D",
+        "uniqueCardId": "LDD8W",
+        "scryfall_id": "87a02ac1-c43a-43cc-9c2b-628cfdeb4cbf",
+        "name": "Volatile Arsonist // Dire-Strain Anarchist",
+        "set": "vow",
+        "set_name": "Innistrad: Crimson Vow",
+        "cn": "181",
+        "layout": "transform",
+        "rarity": "mythic",
+        "card_faces": [
+          {
+            "name": "Volatile Arsonist"
+          },
+          {
+            "name": "Dire-Strain Anarchist"
+          }
+        ],
+        "prices": {
+          "usd": 0.8400,
+          "usd_foil": 1.8300,
+          "ck": 0.9900,
+          "ck_foil": 0.9900,
+          "ck_etched": null,
+          "lastUpdatedAtUtc": "2026-10-12T10:05:21.599Z"
+        }
+      }
+    }
+  ]
+}

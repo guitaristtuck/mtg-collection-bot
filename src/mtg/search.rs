@@ -41,7 +41,7 @@ fn generate_embed_data_from_search_results(
             let name = cards[0].name.clone();
             SearchResultEmbed {
                 title: format!("{} [{}:{}]", name, set.to_uppercase(), cn),
-                ck_price: preferred_price(cards.iter().map(|c| c.ck_price.as_str())),
+                ck_price: preferred_price(cards.iter().map(|c| c.ck_price)),
                 name,
                 set,
                 cn,
@@ -64,24 +64,11 @@ fn generate_embed_data_from_search_results(
 
 /// Picks the price to show for a printing whose rows may be a mix of foil and non-foil.
 ///
-/// Rows only carry a price string. Providers already report the non-foil Card Kingdom price
-/// when it exists and fall back to foil/etched (or `0.00`) otherwise, so the lowest non-zero
+/// Rows carry no foil flag. Providers report the non-foil Card Kingdom price when it exists
+/// and fall back to foil/etched otherwise (`None` when nothing is known), so the lowest known
 /// price in the group is the best available stand-in for "the non-foil price".
-fn preferred_price<'a>(prices: impl Iterator<Item = &'a str>) -> String {
-    let mut fallback: Option<&str> = None;
-    let mut best: Option<(f64, &str)> = None;
-    for price in prices {
-        fallback.get_or_insert(price);
-        if let Ok(value) = price.parse::<f64>() {
-            if value > 0.0 && best.is_none_or(|(b, _)| value < b) {
-                best = Some((value, price));
-            }
-        }
-    }
-    best.map(|(_, p)| p)
-        .or(fallback)
-        .unwrap_or_default()
-        .to_string()
+fn preferred_price(prices: impl Iterator<Item = Option<f64>>) -> Option<f64> {
+    prices.flatten().reduce(f64::min)
 }
 
 /// Sort key so collector numbers order numerically ("99" < "100"), with any
@@ -97,6 +84,20 @@ fn scryfall_card_url(set: &str, cn: &str) -> String {
     format!("https://scryfall.com/card/{}/{}", set.to_lowercase(), cn)
 }
 
+/// The italic Card Kingdom price line, or `None` when the price is unknown.
+fn ck_price_line(ck_price: Option<f64>) -> Option<String> {
+    ck_price.map(|price| format!("*${price:.2} (Card Kingdom)*"))
+}
+
+/// Shown when a provider had more matches than the one page we fetch.
+fn incomplete_results_line(discord_user: &str) -> String {
+    MessageBuilder::new()
+        .push("*Results from ")
+        .push_mono_safe(discord_user)
+        .push_line("'s collection may be incomplete: only the first page of matches was returned.*")
+        .build()
+}
+
 fn generate_scryfall_image_link(set: &str, cn: &str) -> String {
     format!("https://api.scryfall.com/cards/{set}/{cn}?format=image")
 }
@@ -105,9 +106,12 @@ fn create_card_embeds(consolidated_results: &[SearchResultEmbed]) -> Vec<CreateE
     consolidated_results
         .iter()
         .map(|result| {
-            CreateEmbed::new()
+            let mut embed = CreateEmbed::new();
+            if let Some(price_line) = ck_price_line(result.ck_price) {
+                embed = embed.description(price_line);
+            }
+            embed
                 .title(&result.title)
-                .description(format!("*${} (Card Kingdom)*", result.ck_price))
                 .url(scryfall_card_url(&result.set, &result.cn))
                 .thumbnail(generate_scryfall_image_link(&result.set, &result.cn))
                 .field("Owner", result.owners.join("\n"), true)
@@ -123,11 +127,14 @@ fn create_card_compact_str(consolidated_results: &[SearchResultEmbed]) -> String
 
     for (shown, result) in consolidated_results.iter().enumerate() {
         let mut new_entry = format!(
-            "[{}]({}):\n*${} (Card Kingdom)*\n",
+            "[{}]({}):\n",
             result.title,
             scryfall_card_url(&result.set, &result.cn),
-            result.ck_price
         );
+        if let Some(price_line) = ck_price_line(result.ck_price) {
+            new_entry.push_str(&price_line);
+            new_entry.push('\n');
+        }
 
         for (owner, quantity) in result.owners.iter().zip(result.quantities.iter()) {
             new_entry.push_str(&format!("`{quantity}` owned by `{owner}`\n"))
@@ -209,29 +216,31 @@ pub async fn search_collections(
     // This needs to be limited to 1 request per second to avoid rate limiting by moxfield
     let mut tick = interval(Duration::from_secs(1));
     for (i, collection) in config.mtg.collections.iter().enumerate() {
-        let search_term = search_term.clone(); // Clone for each iteration here
+        let (id, owner) = (&collection.provider_collection, &collection.discord_user);
         let result = match collection.provider {
             MTGCollectionProvider::Archidekt => {
-                crate::mtg::providers::archidekt::search(
-                    collection.discord_user.clone(),
-                    collection.provider_collection.clone(),
-                    search_term.clone(),
-                )
-                .await
+                config
+                    .providers
+                    .archidekt
+                    .search(id, &search_term, owner)
+                    .await
             }
             MTGCollectionProvider::Moxfield => {
-                crate::mtg::providers::moxfield::search(
-                    collection.discord_user.clone(),
-                    collection.provider_collection.clone(),
-                    search_term.clone(),
-                    config.env.moxfield_user_agent.clone(),
-                )
-                .await
+                config
+                    .providers
+                    .moxfield
+                    .search(id, &search_term, owner)
+                    .await
             }
         };
         // wait for the next tick
         match result {
-            Ok(mut v) => raw_results.append(&mut v),
+            Ok(mut page) => {
+                if page.may_be_incomplete {
+                    errors.push_str(&incomplete_results_line(owner));
+                }
+                raw_results.append(&mut page.cards)
+            }
             Err(e) => errors.push_str(&collection_error_line(
                 &config.mtg.collections[i].discord_user,
                 &e.to_string(),
@@ -285,7 +294,7 @@ mod tests {
         cn: &str,
         quantity: i64,
         owner: &str,
-        price: &str,
+        price: Option<f64>,
     ) -> SearchResultCard {
         SearchResultCard {
             name: name.to_string(),
@@ -293,7 +302,7 @@ mod tests {
             cn: cn.to_string(),
             quantity,
             owner: owner.to_string(),
-            ck_price: price.to_string(),
+            ck_price: price,
         }
     }
 
@@ -329,7 +338,12 @@ mod tests {
     #[test]
     fn single_card_produces_single_result() {
         let results = generate_embed_data_from_search_results(vec![card(
-            "Sol Ring", "c21", "263", 2, "alice", "1.99",
+            "Sol Ring",
+            "c21",
+            "263",
+            2,
+            "alice",
+            Some(1.99),
         )]);
         assert_eq!(results.len(), 1);
         let r = &results[0];
@@ -337,15 +351,15 @@ mod tests {
         assert_eq!(r.name, "Sol Ring");
         assert_eq!(r.set, "c21");
         assert_eq!(r.cn, "263");
-        assert_eq!(r.ck_price, "1.99");
+        assert_eq!(r.ck_price, Some(1.99));
         assert_eq!(holdings(r), pairs(&[("alice", "2")]));
     }
 
     #[test]
     fn one_owner_across_several_collections_sums_quantities() {
         let results = generate_embed_data_from_search_results(vec![
-            card("Sol Ring", "c21", "263", 2, "alice", "1.99"),
-            card("Sol Ring", "c21", "263", 3, "alice", "1.99"),
+            card("Sol Ring", "c21", "263", 2, "alice", Some(1.99)),
+            card("Sol Ring", "c21", "263", 3, "alice", Some(1.99)),
         ]);
         assert_eq!(results.len(), 1);
         assert_eq!(holdings(&results[0]), pairs(&[("alice", "5")]));
@@ -354,10 +368,10 @@ mod tests {
     #[test]
     fn several_owners_are_paired_with_their_quantities_in_sorted_order() {
         let results = generate_embed_data_from_search_results(vec![
-            card("Sol Ring", "c21", "263", 1, "carol", "1.99"),
-            card("Sol Ring", "c21", "263", 7, "alice", "1.99"),
-            card("Sol Ring", "c21", "263", 4, "bob", "1.99"),
-            card("Sol Ring", "c21", "263", 2, "carol", "1.99"),
+            card("Sol Ring", "c21", "263", 1, "carol", Some(1.99)),
+            card("Sol Ring", "c21", "263", 7, "alice", Some(1.99)),
+            card("Sol Ring", "c21", "263", 4, "bob", Some(1.99)),
+            card("Sol Ring", "c21", "263", 2, "carol", Some(1.99)),
         ]);
         assert_eq!(results.len(), 1);
         assert_eq!(
@@ -369,8 +383,8 @@ mod tests {
     #[test]
     fn set_codes_differing_only_in_case_are_one_printing() {
         let results = generate_embed_data_from_search_results(vec![
-            card("Sol Ring", "C21", "263", 1, "alice", "1.99"),
-            card("Sol Ring", "c21", "263", 1, "bob", "1.99"),
+            card("Sol Ring", "C21", "263", 1, "alice", Some(1.99)),
+            card("Sol Ring", "c21", "263", 1, "bob", Some(1.99)),
         ]);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].title, "Sol Ring [C21:263]");
@@ -391,9 +405,9 @@ mod tests {
                 "51",
                 1,
                 "alice",
-                "0.25",
+                Some(0.25),
             ),
-            card("Delver of Secrets", "isd", "51", 1, "bob", "0.25"),
+            card("Delver of Secrets", "isd", "51", 1, "bob", Some(0.25)),
         ]);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "Delver of Secrets // Insectile Aberration");
@@ -402,15 +416,15 @@ mod tests {
     #[test]
     fn foil_and_non_foil_rows_merge_and_prefer_non_foil_price() {
         // Providers report the non-foil price when it exists and fall back to the
-        // foil price (or 0.00) otherwise, so the lowest non-zero price in a group
+        // foil price (or None) otherwise, so the lowest known price in a group
         // is the non-foil one.
         let results = generate_embed_data_from_search_results(vec![
-            card("Sol Ring", "c21", "263", 1, "alice", "0.00"),
-            card("Sol Ring", "c21", "263", 1, "alice", "5.49"),
-            card("Sol Ring", "c21", "263", 2, "bob", "1.99"),
+            card("Sol Ring", "c21", "263", 1, "alice", None),
+            card("Sol Ring", "c21", "263", 1, "alice", Some(5.49)),
+            card("Sol Ring", "c21", "263", 2, "bob", Some(1.99)),
         ]);
         assert_eq!(results.len(), 1);
-        assert_eq!(results[0].ck_price, "1.99");
+        assert_eq!(results[0].ck_price, Some(1.99));
         assert_eq!(
             holdings(&results[0]),
             pairs(&[("alice", "2"), ("bob", "2")])
@@ -418,22 +432,32 @@ mod tests {
     }
 
     #[test]
-    fn price_falls_back_to_zero_when_nothing_else_is_known() {
-        let results = generate_embed_data_from_search_results(vec![card(
-            "Sol Ring", "c21", "263", 1, "alice", "0.00",
-        )]);
-        assert_eq!(results[0].ck_price, "0.00");
+    fn price_is_none_when_no_row_has_one() {
+        let results = generate_embed_data_from_search_results(vec![
+            card("Sol Ring", "c21", "263", 1, "alice", None),
+            card("Sol Ring", "c21", "263", 1, "bob", None),
+        ]);
+        assert_eq!(results[0].ck_price, None);
+    }
+
+    #[test]
+    fn group_price_ignores_rows_without_a_price() {
+        let results = generate_embed_data_from_search_results(vec![
+            card("Sol Ring", "c21", "263", 1, "alice", None),
+            card("Sol Ring", "c21", "263", 1, "bob", Some(2.49)),
+        ]);
+        assert_eq!(results[0].ck_price, Some(2.49));
     }
 
     #[test]
     fn results_are_sorted_by_name_then_set_then_collector_number() {
         let results = generate_embed_data_from_search_results(vec![
-            card("Sol Ring", "cmr", "472", 1, "a", "1"),
-            card("Sol Ring", "c21", "263", 1, "a", "1"),
-            card("Arcane Signet", "cmr", "297", 1, "a", "1"),
-            card("Sol Ring", "c21", "1000", 1, "a", "1"),
-            card("Sol Ring", "c21", "99", 1, "a", "1"),
-            card("sol ring", "C21", "100", 1, "a", "1"),
+            card("Sol Ring", "cmr", "472", 1, "a", Some(1.0)),
+            card("Sol Ring", "c21", "263", 1, "a", Some(1.0)),
+            card("Arcane Signet", "cmr", "297", 1, "a", Some(1.0)),
+            card("Sol Ring", "c21", "1000", 1, "a", Some(1.0)),
+            card("Sol Ring", "c21", "99", 1, "a", Some(1.0)),
+            card("sol ring", "C21", "100", 1, "a", Some(1.0)),
         ]);
         let titles: Vec<&str> = results.iter().map(|r| r.title.as_str()).collect();
         assert_eq!(
@@ -467,7 +491,7 @@ mod tests {
             "51",
             1,
             "alice",
-            "0.25",
+            Some(0.25),
         )]);
         let embed = embed_json(&create_card_embeds(&results)[0]);
         assert_eq!(embed["url"], "https://scryfall.com/card/isd/51");
@@ -485,8 +509,8 @@ mod tests {
     #[test]
     fn embed_fields_are_serialized_correctly() {
         let results = generate_embed_data_from_search_results(vec![
-            card("Sol Ring", "c21", "263", 2, "bob", "1.99"),
-            card("Sol Ring", "c21", "263", 1, "alice", "1.99"),
+            card("Sol Ring", "c21", "263", 2, "bob", Some(1.99)),
+            card("Sol Ring", "c21", "263", 1, "alice", Some(1.99)),
         ]);
         let embeds = create_card_embeds(&results);
         assert_eq!(embeds.len(), 1);
@@ -512,8 +536,8 @@ mod tests {
     #[test]
     fn compact_entry_format() {
         let results = generate_embed_data_from_search_results(vec![
-            card("Sol Ring", "c21", "263", 2, "bob", "1.99"),
-            card("Sol Ring", "c21", "263", 1, "alice", "1.99"),
+            card("Sol Ring", "c21", "263", 2, "bob", Some(1.99)),
+            card("Sol Ring", "c21", "263", 1, "alice", Some(1.99)),
         ]);
         assert_eq!(
             create_card_compact_str(&results),
@@ -534,7 +558,7 @@ mod tests {
                         &i.to_string(),
                         1,
                         "alice",
-                        "1.99",
+                        Some(1.99),
                     )
                 })
                 .collect(),
@@ -635,5 +659,79 @@ mod tests {
             "*Could not search collection for user `al'ice`: \
              error decoding \\`\\*\\_body\\_\\*\\`*\n"
         );
+    }
+}
+
+#[cfg(test)]
+mod price_line_tests {
+    use super::*;
+
+    fn result(ck_price: Option<f64>) -> SearchResultEmbed {
+        SearchResultEmbed {
+            title: "Sol Ring [SLD:2807]".to_string(),
+            name: "Sol Ring".to_string(),
+            set: "sld".to_string(),
+            cn: "2807".to_string(),
+            owners: vec!["tuckface".to_string()],
+            quantities: vec!["1".to_string()],
+            ck_price,
+        }
+    }
+
+    fn embed_json(embed: &CreateEmbed) -> serde_json::Value {
+        serde_json::to_value(embed).unwrap()
+    }
+
+    #[test]
+    fn price_line_formats_two_decimals() {
+        assert_eq!(
+            ck_price_line(Some(7.5)).as_deref(),
+            Some("*$7.50 (Card Kingdom)*")
+        );
+        assert_eq!(ck_price_line(None), None);
+    }
+
+    #[test]
+    fn embed_has_price_description_when_known() {
+        let embeds = create_card_embeds(&[result(Some(7.49))]);
+        assert_eq!(
+            embed_json(&embeds[0])["description"],
+            "*$7.49 (Card Kingdom)*"
+        );
+    }
+
+    #[test]
+    fn embed_omits_price_when_unknown() {
+        let embeds = create_card_embeds(&[result(None)]);
+        let json = embed_json(&embeds[0]);
+        assert!(json.get("description").is_none(), "{json}");
+    }
+
+    #[test]
+    fn compact_entry_omits_price_when_unknown() {
+        let text = create_card_compact_str(&[result(None)]);
+        assert!(!text.contains("Card Kingdom"), "{text}");
+        assert!(!text.contains("$0.00"), "{text}");
+        assert!(text.contains("`1` owned by `tuckface`"), "{text}");
+    }
+
+    #[test]
+    fn compact_entry_includes_price_when_known() {
+        let text = create_card_compact_str(&[result(Some(1.29))]);
+        assert!(
+            text.contains(":\n*$1.29 (Card Kingdom)*\n`1` owned by"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn incomplete_line_names_the_user() {
+        assert_eq!(
+            incomplete_results_line("wookiee"),
+            "*Results from `wookiee`'s collection may be incomplete: \
+             only the first page of matches was returned.*\n"
+        );
+        // user names are escaped like in error lines
+        assert!(incomplete_results_line("a`b").contains("`a'b`"));
     }
 }

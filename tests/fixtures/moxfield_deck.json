@@ -1,0 +1,31 @@
+{
+  "id": "mOn0r3",
+  "name": "Kenrith",
+  "description": "",
+  "format": "commander",
+  "visibility": "unlisted",
+  "publicUrl": "https://moxfield.com/decks/ev681gZZkEOhPGQ9IqoHWQ",
+  "publicId": "ev681gZZkEOhPGQ9IqoHWQ",
+  "likeCount": 0,
+  "viewCount": 8,
+  "createdAtUtc": "2023-08-17T20:31:23.68Z",
+  "lastUpdatedAtUtc": "2024-04-07T14:24:25.713Z",
+  "createdByUser": {
+    "displayName": "scondo62"
+  },
+  "main": {
+    "id": "jq5jZ",
+    "uniqueCardId": "kpxoB",
+    "scryfall_id": "0e259db1-14db-4314-998c-6a076a28d8cb",
+    "name": "Kenrith, the Returned King",
+    "set": "plst",
+    "set_name": "The List",
+    "cn": "ELD-303",
+    "layout": "normal",
+    "card_faces": [],
+    "prices": {
+      "usd": 2.8100,
+      "ck": 1.7900
+    }
+  }
+}

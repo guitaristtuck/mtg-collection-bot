@@ -17,18 +17,18 @@ pub async fn list_community_decks(config: &BotConfig) -> EditInteractionResponse
         .map(|(i, deck)| async move {
             let result = match deck.provider {
                 MTGCollectionProvider::Archidekt => {
-                    crate::mtg::providers::archidekt::get_deck(
-                        deck.discord_user.clone(),
-                        deck.provider_deck.clone(),
-                    )
-                    .await
+                    config
+                        .providers
+                        .archidekt
+                        .get_deck(&deck.provider_deck)
+                        .await
                 }
                 MTGCollectionProvider::Moxfield => {
-                    crate::mtg::providers::moxfield::get_deck(
-                        deck.discord_user.clone(),
-                        deck.provider_deck.clone(),
-                    )
-                    .await
+                    config
+                        .providers
+                        .moxfield
+                        .get_deck(&deck.provider_deck)
+                        .await
                 }
             };
             (i, result)
@@ -42,14 +42,15 @@ pub async fn list_community_decks(config: &BotConfig) -> EditInteractionResponse
     for deck in deck_responses.into_iter() {
         match deck.1 {
             Ok(value) => {
-                embeds.push(
-                    CreateEmbed::new()
-                        .title(value.title)
-                        .url(value.url)
-                        .thumbnail(value.thumbnail)
-                        .field("Original Creator", value.original_owner, false)
-                        .field("Last Updated At", value.last_updated_at, false),
-                );
+                let mut embed = CreateEmbed::new()
+                    .title(value.title)
+                    .url(value.url)
+                    .field("Original Creator", value.original_owner, false)
+                    .field("Last Updated At", value.last_updated_at, false);
+                if let Some(thumbnail) = value.thumbnail {
+                    embed = embed.thumbnail(thumbnail);
+                }
+                embeds.push(embed);
             }
             Err(e) => errors.push_str(&format!(
                 "*Could not load deck for deck id `{}`: {}*\n",

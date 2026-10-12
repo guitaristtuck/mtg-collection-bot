@@ -1,0 +1,144 @@
+{
+  "count": 68,
+  "next": "http://archidekt.com/api/collection/243732/?cardName=sol&page=2",
+  "previous": null,
+  "hasDeckRelationOverflow": false,
+  "results": [
+    {
+      "card": {
+        "id": 153881,
+        "collectorNumber": "2807",
+        "uid": "3d5c99e9-7c3e-4149-82a6-3c7d5d302488",
+        "edition": {
+          "editioncode": "sld",
+          "editionname": "Secret Lair Drop"
+        },
+        "oracleCard": {
+          "name": "Sol Ring",
+          "layout": "normal",
+          "faces": []
+        },
+        "prices": {
+          "ck": 7.49,
+          "ckfoil": 8.99,
+          "ckMinimum": 2.79,
+          "tcg": 5.25,
+          "tcgfoil": 5.87,
+          "cm": 7.53
+        },
+        "rarity": "rare",
+        "name": "Sol Ring",
+        "options": [
+          "Normal",
+          "Foil"
+        ]
+      },
+      "modifier": "Normal",
+      "id": 492547256,
+      "quantity": 1,
+      "foil": false,
+      "condition": 1,
+      "createdAt": "2026-08-12T15:09:12.725797Z"
+    },
+    {
+      "card": {
+        "id": 43776,
+        "name": "Sorin, Solemn Visitor",
+        "set": "ktk",
+        "cn": "202",
+        "prices": {
+          "ck": 1.29,
+          "ckfoil": 5.99,
+          "ckMinimum": 0.99,
+          "tcg": 3.11,
+          "tcgfoil": 8.06,
+          "cm": 1.37
+        }
+      },
+      "modifier": "Normal",
+      "id": 430486895,
+      "quantity": 1,
+      "foil": false,
+      "condition": 1,
+      "createdAt": "2026-05-19T02:44:24.943850Z"
+    },
+    {
+      "card": {
+        "id": 140709,
+        "collectorNumber": "60",
+        "uid": "6904ea20-e504-47da-95a0-08739fdde260",
+        "edition": {
+          "editioncode": "inr",
+          "editionname": "Innistrad Remastered"
+        },
+        "oracleCard": {
+          "name": "Delver of Secrets // Insectile Aberration",
+          "layout": "transform",
+          "faces": [
+            {
+              "name": "Delver of Secrets"
+            },
+            {
+              "name": "Insectile Aberration"
+            }
+          ]
+        },
+        "prices": {
+          "ck": 0.49,
+          "ckfoil": 0.79,
+          "ckMinimum": 0.49,
+          "tcg": 0.33,
+          "tcgfoil": 0.36,
+          "cm": 1.31
+        },
+        "rarity": "common",
+        "name": "Delver of Secrets // Insectile Aberration",
+        "options": [
+          "Normal",
+          "Foil"
+        ]
+      },
+      "modifier": "Normal",
+      "id": 427547626,
+      "quantity": 1,
+      "foil": false,
+      "condition": 1,
+      "createdAt": "2026-05-15T15:28:10.709383Z"
+    },
+    {
+      "card": {
+        "id": 146802,
+        "collectorNumber": "301",
+        "uid": "51bb9dee-0246-41f7-bcc6-e402ebc2b701",
+        "edition": {
+          "editioncode": "tle",
+          "editionname": "Avatar: The Last Airbender Eternal"
+        },
+        "oracleCard": {
+          "name": "Plains",
+          "layout": "normal",
+          "faces": []
+        },
+        "prices": {
+          "ck": 0.0,
+          "ckfoil": 0.0,
+          "ckMinimum": 0.35,
+          "tcg": 0.17,
+          "tcgfoil": 0.0,
+          "cm": 0.17
+        },
+        "rarity": "common",
+        "name": "Plains",
+        "options": [
+          "Normal"
+        ]
+      },
+      "modifier": "Normal",
+      "id": 324060846,
+      "quantity": 1,
+      "foil": false,
+      "condition": 1,
+      "createdAt": "2025-12-14T18:51:02.160484Z"
+    }
+  ]
+}

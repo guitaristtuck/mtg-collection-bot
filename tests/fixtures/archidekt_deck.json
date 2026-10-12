@@ -1,0 +1,119 @@
+{
+  "id": 3531305,
+  "name": "The Fighting Dragons",
+  "deckFormat": 3,
+  "viewCount": 328,
+  "createdAt": "2022-11-10T03:58:57.659210Z",
+  "updatedAt": "2024-04-24T16:37:28.613711Z",
+  "owner": {
+    "id": 170990,
+    "username": "MakiMakiRoll"
+  },
+  "categories": [
+    {
+      "name": "Commander",
+      "includedInDeck": true
+    },
+    {
+      "name": "Land",
+      "includedInDeck": true
+    },
+    {
+      "name": "Artifact",
+      "includedInDeck": true
+    },
+    {
+      "name": "Creature",
+      "includedInDeck": true
+    },
+    {
+      "name": "Maybeboard",
+      "includedInDeck": false
+    },
+    {
+      "name": "Enchantment",
+      "includedInDeck": true
+    },
+    {
+      "name": "Planeswalker",
+      "includedInDeck": true
+    },
+    {
+      "name": "Instant",
+      "includedInDeck": true
+    },
+    {
+      "name": "Sorcery",
+      "includedInDeck": true
+    },
+    {
+      "name": "Sideboard",
+      "includedInDeck": true
+    }
+  ],
+  "cards": [
+    {
+      "id": 1671547367,
+      "quantity": 1,
+      "modifier": "Normal",
+      "categories": [
+        "Commander"
+      ],
+      "card": {
+        "id": 104232,
+        "collectorNumber": "284",
+        "uid": "a934590b-5c70-4f07-af67-fbe817a99531",
+        "edition": {
+          "editioncode": "clb",
+          "editionname": "Commander Legends: Battle for Baldur's Gate"
+        },
+        "oracleCard": {
+          "name": "Miirym, Sentinel Wyrm",
+          "layout": "normal"
+        }
+      }
+    },
+    {
+      "id": 1671548414,
+      "quantity": 1,
+      "modifier": "Normal",
+      "categories": [
+        "Creature"
+      ],
+      "card": {
+        "id": 104328,
+        "collectorNumber": "99",
+        "uid": "0bbfb7ae-9a32-428d-903c-99d0d8669b8d",
+        "edition": {
+          "editioncode": "clb",
+          "editionname": "Commander Legends: Battle for Baldur's Gate"
+        },
+        "oracleCard": {
+          "name": "Sword Coast Serpent // Capsizing Wave",
+          "layout": "adventure"
+        }
+      }
+    },
+    {
+      "id": 1671547047,
+      "quantity": 1,
+      "modifier": "Normal",
+      "categories": [
+        "Enchantment"
+      ],
+      "card": {
+        "id": 104043,
+        "collectorNumber": "212",
+        "uid": "b0260e1f-ff6a-4ef3-bef7-8c77f8413500",
+        "edition": {
+          "editioncode": "clb",
+          "editionname": "Commander Legends: Battle for Baldur's Gate"
+        },
+        "oracleCard": {
+          "name": "Acolyte of Bahamut",
+          "layout": "normal"
+        }
+      }
+    }
+  ]
+}
