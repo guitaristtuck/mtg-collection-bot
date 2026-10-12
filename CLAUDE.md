@@ -14,7 +14,7 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
 ```
-CI uses Rust 1.86 (`rust-toolchain.toml`); a newer local toolchain may flag extra clippy lints — fix them anyway.
+Rust version is pinned in `rust-toolchain.toml`; keep the workflow `dtolnay/rust-toolchain@<ver>` tags in sync with it.
 
 ## Layout
 - `src/main.rs` — `Handler` (serenity `EventHandler`): registers guild slash commands in `ready`, dispatches by name in `interaction_create`, forwards voice events. Gateway intents: `GUILDS`, `GUILD_VOICE_STATES`.
