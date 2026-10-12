@@ -1,5 +1,5 @@
-use serenity::model::application::ResolvedOption;
 use serenity::builder::{CreateCommand, EditInteractionResponse};
+use serenity::model::application::ResolvedOption;
 
 pub fn run(_options: &[ResolvedOption]) -> EditInteractionResponse {
     EditInteractionResponse::new().content("F3BK bot reporting in, ready for nonsense")

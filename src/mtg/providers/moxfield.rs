@@ -1,8 +1,8 @@
-use reqwest::{StatusCode,Client};
+use crate::mtg::models::{CommunityDeckMetadata, SearchResultCard};
 use reqwest::header::CONTENT_TYPE;
-use std::error::Error;
+use reqwest::{Client, StatusCode};
 use serde::Deserialize;
-use crate::mtg::models::{SearchResultCard,CommunityDeckMetadata};
+use std::error::Error;
 
 // Search API response structs
 #[derive(Deserialize)]
@@ -28,17 +28,33 @@ struct MoxfieldSearchResult {
 
 #[derive(Deserialize)]
 struct MoxfieldSearchResponse {
-    data: Vec<MoxfieldSearchResult>
+    data: Vec<MoxfieldSearchResult>,
 }
 
+pub async fn search(
+    discord_user: String,
+    collection_id: String,
+    search_term: String,
+    moxfield_user_agent: String,
+) -> Result<Vec<SearchResultCard>, Box<dyn Error + Send + Sync>> {
+    let client = Client::builder()
+        .user_agent(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0",
+        )
+        .build()?;
+    let modified_search_term = format!("\"{}\"", search_term);
 
-pub async fn search(discord_user: String, collection_id: String, search_term: String, moxfield_user_agent: String) -> Result<Vec<SearchResultCard>, Box<dyn Error + Send + Sync>> {    
-    let client = Client::builder().user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0").build()?;
-    let modified_search_term = format!("\"{}\"",search_term);
-
-    log::info!("Searching moxfield collection of '{}' with collection id '{}' for term '{}'",discord_user,collection_id,search_term);
+    log::info!(
+        "Searching moxfield collection of '{}' with collection id '{}' for term '{}'",
+        discord_user,
+        collection_id,
+        search_term
+    );
     let resp = client
-        .get(format!("http://api2.moxfield.com/v1/trade-binders/{}/search?q={}", collection_id, &modified_search_term))
+        .get(format!(
+            "http://api2.moxfield.com/v1/trade-binders/{}/search?q={}",
+            collection_id, &modified_search_term
+        ))
         .header(CONTENT_TYPE, "*/*")
         // Added this header as a unique user agent that is whitelisted in cloudflare bot protection
         .header("User-Agent", moxfield_user_agent)
@@ -46,12 +62,17 @@ pub async fn search(discord_user: String, collection_id: String, search_term: St
         .await?;
 
     let moxfield_response = match resp.status() {
-            StatusCode::OK => {
-                let search_response: MoxfieldSearchResponse = resp.json::<MoxfieldSearchResponse>().await?;
-                Ok::<MoxfieldSearchResponse, Box<dyn Error + Send + Sync>>(search_response)
-            }
-            status => Err(format!("Moxfield collection search failed with status code {}",status).into()),
-        }?;
+        StatusCode::OK => {
+            let search_response: MoxfieldSearchResponse =
+                resp.json::<MoxfieldSearchResponse>().await?;
+            Ok::<MoxfieldSearchResponse, Box<dyn Error + Send + Sync>>(search_response)
+        }
+        status => Err(format!(
+            "Moxfield collection search failed with status code {}",
+            status
+        )
+        .into()),
+    }?;
 
     let mut result_cards: Vec<SearchResultCard> = Vec::new();
 
@@ -62,15 +83,20 @@ pub async fn search(discord_user: String, collection_id: String, search_term: St
             cn: result.card.cn,
             quantity: result.quantity,
             owner: discord_user.clone(),
-            ck_price: format!("{:.2}", result.card.prices.ck.unwrap_or(
-                result.card.prices.ck_foil.unwrap_or(
-                    result.card.prices.ck_etched.unwrap_or(0.00)
+            ck_price: format!(
+                "{:.2}",
+                result.card.prices.ck.unwrap_or(
+                    result
+                        .card
+                        .prices
+                        .ck_foil
+                        .unwrap_or(result.card.prices.ck_etched.unwrap_or(0.00))
                 )
-            )),
+            ),
         })
     }
 
-    return Ok(result_cards)
+    Ok(result_cards)
 }
 
 #[derive(Deserialize)]
@@ -91,27 +117,40 @@ struct MoxfieldDeck {
     last_updated_at_utc: String,
 }
 
-pub async fn get_deck(discord_user: String, deck_id: String) -> Result<CommunityDeckMetadata, Box<dyn Error + Send + Sync>> {
+pub async fn get_deck(
+    discord_user: String,
+    deck_id: String,
+) -> Result<CommunityDeckMetadata, Box<dyn Error + Send + Sync>> {
     let client = Client::new();
 
-    log::info!("Fetching moxfield deck metadata owned by  '{}' for deck id '{}'",discord_user,deck_id);
+    log::info!(
+        "Fetching moxfield deck metadata owned by  '{}' for deck id '{}'",
+        discord_user,
+        deck_id
+    );
     let resp = client
-        .get(format!("https://api2.moxfield.com/v3/decks/all/{}", deck_id))
+        .get(format!(
+            "https://api2.moxfield.com/v3/decks/all/{}",
+            deck_id
+        ))
         .send()
         .await?;
 
     let moxfield_response = match resp.status() {
-            StatusCode::OK => {
-                let deck_response: MoxfieldDeck = resp.json::<MoxfieldDeck>().await?;
-                Ok::<MoxfieldDeck, Box<dyn Error + Send + Sync>>(deck_response)
-            }
-            status => Err(format!("Moxfield deck lookup failed with status code {}",status).into()),
-        }?;
+        StatusCode::OK => {
+            let deck_response: MoxfieldDeck = resp.json::<MoxfieldDeck>().await?;
+            Ok::<MoxfieldDeck, Box<dyn Error + Send + Sync>>(deck_response)
+        }
+        status => Err(format!("Moxfield deck lookup failed with status code {}", status).into()),
+    }?;
 
-    return Ok(CommunityDeckMetadata{
+    Ok(CommunityDeckMetadata {
         title: moxfield_response.name,
         url: moxfield_response.public_url,
-        thumbnail: format!("https://api.scryfall.com/cards/{}/{}?format=image",moxfield_response.main.set,moxfield_response.main.cn),
+        thumbnail: format!(
+            "https://api.scryfall.com/cards/{}/{}?format=image",
+            moxfield_response.main.set, moxfield_response.main.cn
+        ),
         original_owner: moxfield_response.created_by_user.display_name,
         last_updated_at: moxfield_response.last_updated_at_utc,
     })
